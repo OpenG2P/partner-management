@@ -1,0 +1,137 @@
+questions:
+# ----------------------------- General -----------------------------
+# NOTE: the hostname "namespace" segment is auto-derived from the install
+# namespace (.Release.Namespace), so it is intentionally not asked here. Override
+# the individual hostnames below only if a host must differ from that default.
+- variable: global.staffPortalUiHostname
+  description: Hostname for the Partner Management staff portal (admin UI)
+  type: string
+  label: Staff Portal UI Hostname
+  group: General
+- variable: global.staffPortalApiHostname
+  description: Hostname for the staff-portal-api (staff/admin backend)
+  type: string
+  label: Staff Portal API Hostname
+  group: General
+- variable: global.partnerApiHostname
+  description: Hostname for the partner-api (unauthenticated key-fetch used by other modules)
+  type: string
+  label: Partner API (Key Fetch) Hostname
+  group: General
+
+# Component toggles
+- variable: staffPortalApi.enabled
+  description: Install the staff-portal-api (admin onboarding/approval/partner management)
+  type: boolean
+  default: true
+  label: Staff Portal API
+  group: General
+- variable: partnerApi.enabled
+  description: Install the partner-api (public key-fetch service)
+  type: boolean
+  default: true
+  label: Partner API
+  group: General
+- variable: staffPortalUi.enabled
+  description: Install the staff portal UI
+  type: boolean
+  default: true
+  label: Staff Portal UI
+  group: General
+- variable: postgres-init.enabled
+  description: Run postgres-init to create the service database and user
+  type: boolean
+  default: true
+  label: Postgres Init
+  group: General
+- variable: keycloak-init.enabled
+  description: Run keycloak-init to create the staff-portal OIDC client and partner_manager role
+  type: boolean
+  default: true
+  label: Keycloak Init
+  group: General
+
+# --------------------- Authentication / IAM ------------------------
+- variable: global.keycloakBaseUrl
+  description: Keycloak base URL used to validate staff-realm tokens (issuer/JWKS)
+  type: string
+  label: Keycloak Base URL
+  group: Authentication
+- variable: global.keycloakRealm
+  description: Keycloak realm for staff authentication
+  type: string
+  default: staff
+  label: Keycloak Realm
+  group: Authentication
+- variable: global.iamServiceUrl
+  description: Internal URL of the shared commons IAM staff-portal-api the UI logs in against (e.g. http://commons-services-iam-staff-portal-api). This varies per environment.
+  type: string
+  label: IAM Staff Portal API URL
+  group: Authentication
+- variable: global.loginProviderId
+  description: Login provider id (row in the shared IAM's login_providers table) used to start the OIDC login
+  type: string
+  default: "1"
+  label: Login Provider ID
+  group: Authentication
+- variable: global.authAdminRole
+  description: Keycloak role a staff user must hold (on the <release>-staff-portal client) to use the admin APIs
+  type: string
+  default: partner_manager
+  label: Admin Role
+  group: Authentication
+
+# --------------------------- Audit Manager -------------------------
+# The local pm_audit_events ledger is ALWAYS on and independent of these; these
+# only control the additional, non-blocking central forensic trail.
+- variable: global.auditEnabled
+  description: Master switch for emitting audit events to the OpenG2P Audit Manager. Must be true AND global.auditManagerUrl must be set for central audits to flow. The local ledger is unaffected.
+  type: boolean
+  default: true
+  label: Audit Enabled
+  group: Audit Manager
+- variable: global.auditManagerUrl
+  description: Internal URL of the OpenG2P Audit Manager service (e.g. http://audit-manager when in the same namespace).
+  type: string
+  label: Audit Manager URL
+  group: Audit Manager
+  show_if: global.auditEnabled=true
+- variable: global.auditAnonymousFailures
+  description: When true, also audit rejected anonymous calls (401/403). Set false to only audit authenticated user calls.
+  type: boolean
+  default: true
+  label: Audit Anonymous Failures
+  group: Audit Manager
+  show_if: global.auditEnabled=true
+
+# ------------------------------ Images -----------------------------
+- variable: staffPortalApi.image.repository
+  description: Docker image repository for the staff-portal-api
+  type: string
+  label: Staff Portal API Image Repository
+  group: Images
+- variable: staffPortalApi.image.tag
+  description: Docker image tag for the staff-portal-api
+  type: string
+  label: Staff Portal API Image Tag
+  group: Images
+- variable: partnerApi.image.repository
+  description: Docker image repository for the partner-api
+  type: string
+  label: Partner API Image Repository
+  group: Images
+- variable: partnerApi.image.tag
+  description: Docker image tag for the partner-api
+  type: string
+  label: Partner API Image Tag
+  group: Images
+- variable: staffPortalUi.image.repository
+  description: Docker image repository for the staff portal UI
+  type: string
+  label: Staff Portal UI Image Repository
+  group: Images
+- variable: staffPortalUi.image.tag
+  description: Docker image tag for the staff portal UI
+  type: string
+  label: Staff Portal UI Image Tag
+  group: Images
