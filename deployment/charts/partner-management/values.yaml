@@ -36,7 +36,9 @@ global:
   # The local pm_audit_events ledger is always on; this is the additional
   # cross-platform trail. Non-blocking, so a down Audit Manager never breaks PM.
   auditEnabled: true
-  auditManagerUrl: 'http://audit-manager'
+  # In-cluster name of the shared Audit Manager (deployed under the
+  # commons-services release), same as national-social-registry uses.
+  auditManagerUrl: 'http://commons-services-auditmanager:80'
   auditAnonymousFailures: true
 
   imageRegistry: docker.io

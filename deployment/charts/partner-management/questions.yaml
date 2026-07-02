@@ -91,7 +91,7 @@ questions:
   label: Audit Enabled
   group: Audit Manager
 - variable: global.auditManagerUrl
-  description: Internal URL of the OpenG2P Audit Manager service (e.g. http://audit-manager when in the same namespace).
+  description: Internal URL of the shared OpenG2P Audit Manager service (default http://commons-services-auditmanager:80 when in the same namespace).
   type: string
   label: Audit Manager URL
   group: Audit Manager
