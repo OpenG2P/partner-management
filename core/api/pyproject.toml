@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openg2p-partner-management-api"
+authors = [
+  { name="OpenG2P", email="info@openg2p.org" },
+]
+description = "OpenG2P Partner Management API — central registry of partners and their public keys"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "openg2p-fastapi-common",
+  "openg2p-fastapi-auth",
+  "openg2p-fastapi-auth-models",
+  "cryptography",
+  "pyjwt",
+  "httpx",
+  "asyncpg",
+  "psycopg2",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://openg2p.org"
+Documentation = "https://docs.openg2p.org/"
+Repository = "https://github.com/OpenG2P/partner-management"
+Source = "https://github.com/OpenG2P/partner-management"
+
+[tool.hatch.version]
+path = "src/openg2p_partner_management_api/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openg2p_partner_management_api"]

@@ -1,0 +1,327 @@
+global:
+  # Hostname segment. Leave EMPTY to auto-pick the install namespace.
+  namespace: ""
+
+  # --- Database (provisioned by postgres-init; naming modeled on g2p-bridge/NSR) ---
+  postgresqlHost: commons-postgresql
+  pmDB: '{{ printf "%s" .Release.Name | replace "-" "_" }}'
+  pmDBPort: 5432
+  pmDBUser: '{{ printf "%s_user" .Release.Name | replace "-" "_" }}'
+  # '-db' suffix avoids colliding with the keycloak client secret (named after
+  # the clientId), same reasoning as g2p-bridge.
+  pmDBSecret: '{{ .Release.Name }}-db'
+  pmDBUserPasswordKey: '{{ .Release.Name }}-db-user'
+
+  # --- Hostnames ---
+  staffPortalUiHostname: 'partner-management.{{ .Values.global.namespace | default .Release.Namespace }}.openg2p.org'
+  staffPortalApiHostname: 'partner-management-staff-portal-api.{{ .Values.global.namespace | default .Release.Namespace }}.openg2p.org'
+  partnerApiHostname: 'partner-management-partner-api.{{ .Values.global.namespace | default .Release.Namespace }}.openg2p.org'
+
+  # --- Keycloak (per-namespace commons layer; staff realm) ---
+  keycloakBaseUrl: 'https://keycloak.{{ .Values.global.namespace | default .Release.Namespace }}.openg2p.org'
+  keycloakRealm: staff
+  keycloakIssuerUrl: '{{ tpl .Values.global.keycloakBaseUrl $ }}/realms/{{ .Values.global.keycloakRealm }}'
+
+  # OIDC client created by keycloak-init below; the partner_manager role is a
+  # client role under it. The staff-portal-api authorizes admins on this role.
+  authClientId: '{{ .Release.Name }}-staff-portal'
+  authAdminRole: partner_manager
+
+  # --- Shared commons IAM staff-portal-api (login/profile/logout for the UI) ---
+  iamServiceUrl: 'http://commons-services-iam-staff-portal-api'
+  loginProviderId: "1"
+  cookieDomain: '.{{ .Values.global.namespace | default .Release.Namespace }}.openg2p.org'
+
+  imageRegistry: docker.io
+  imagePullSecrets: []
+
+# ---- Re-sync DB role password to its Secret before app pods start (see g2p-bridge). ----
+dbPasswordSync:
+  enabled: true
+  superuserSecret: commons-postgresql
+  superuserPasswordKey: postgres-password
+  image:
+    repository: jbergknoff/postgresql-client
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# ============================ Postgres init ============================
+postgres-init:
+  enabled: true
+  postgresql:
+    host: '{{ .Values.global.postgresqlHost }}'
+    port: 5432
+    existingSecret: commons-postgresql
+    existingSecretPostgresPasswordKey: postgres-password
+  databases:
+    - name: '{{ tpl .Values.global.pmDB $ }}'
+      user: '{{ tpl .Values.global.pmDBUser $ }}'
+      secret: '{{ tpl .Values.global.pmDBSecret $ }}'
+      secretUserPasswordKey: '{{ tpl .Values.global.pmDBUserPasswordKey $ }}'
+
+# ============================ Keycloak init ============================
+# Registers the staff-portal OIDC client + partner_manager role in the staff
+# realm (same shape as g2p-bridge / national-social-registry).
+keycloak-init:
+  enabled: true
+  keycloak:
+    url: 'http://commons-keycloak:80'
+    user: 'admin'
+    password: ''
+    existingSecret: 'commons-keycloak'
+    existingSecretKey: 'admin-password'
+  suffix: '{{ .Release.Namespace }}'
+  realms:
+    staff:
+      clients:
+        - clientId: '{{ .Release.Name }}-staff-portal'
+          name: Partner Management Staff Portal
+          publicClient: false
+          redirectUris:
+            - 'https://{{ tpl .Values.global.staffPortalUiHostname $ }}/*'
+          clientRoles:
+            - partner_manager
+      users:
+        - username: admin
+          clientRoleMappings:
+            '{{ .Release.Name }}-staff-portal':
+              - partner_manager
+
+# ============================ staff-portal-api ============================
+staffPortalApi:
+  enabled: true
+  nameOverride: staff-portal-api
+
+  replicaCount: 1
+  containerPort: 8000
+
+  image:
+    registry: docker.io
+    repository: openg2p/partner-management-staff-portal-api
+    tag: develop
+    pullPolicy: Always
+
+  serviceAccount:
+    create: true
+    name: ""
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+  istio:
+    enabled: true
+    virtualservice:
+      enabled: true
+      host: '{{ tpl .Values.global.staffPortalApiHostname $ }}'
+      gateway: internal
+      destination: '{{ .Release.Name }}-staff-portal-api'
+      destinationPort: 80
+      prefix: /
+      rewriteUri: ""
+
+  startupProbe:
+    enabled: true
+    httpGet:
+      path: /ping
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    enabled: true
+    httpGet:
+      path: /ping
+      port: http
+    periodSeconds: 20
+  readinessProbe:
+    enabled: true
+    httpGet:
+      path: /ping
+      port: http
+    periodSeconds: 20
+
+  envVars:
+    PARTNER_MANAGER_OPENAPI_TITLE: OpenG2P Partner Management Staff Portal API
+    PARTNER_MANAGER_HOST: 0.0.0.0
+    PARTNER_MANAGER_PORT: '{{ .Values.containerPort }}'
+    PARTNER_MANAGER_DB_HOSTNAME: '{{ .Values.global.postgresqlHost }}'
+    PARTNER_MANAGER_DB_PORT: '{{ .Values.global.pmDBPort }}'
+    PARTNER_MANAGER_DB_DBNAME: '{{ tpl .Values.global.pmDB $ }}'
+    PARTNER_MANAGER_DB_USERNAME: '{{ tpl .Values.global.pmDBUser $ }}'
+    PARTNER_MANAGER_AUTH_ADMIN_ROLE: '{{ .Values.global.authAdminRole }}'
+    PARTNER_MANAGER_AUTH_ADMIN_CLIENT_ID: '{{ tpl .Values.global.authClientId $ }}'
+    PARTNER_MANAGER_CRYPTO_ALLOWED_ALGORITHMS: '["RS256","ES256","EdDSA"]'
+    COMMON_AUTH_ENABLED: "true"
+    COMMON_AUTH_DEFAULT_ISSUERS: '["{{ tpl .Values.global.keycloakIssuerUrl $ }}"]'
+    COMMON_AUTH_DEFAULT_JWKS_URLS: '["{{ tpl .Values.global.keycloakIssuerUrl $ }}/protocol/openid-connect/certs"]'
+
+  envVarsFrom:
+    PARTNER_MANAGER_DB_PASSWORD:
+      secretKeyRef:
+        name: '{{ tpl .Values.global.pmDBSecret $ }}'
+        key: '{{ tpl .Values.global.pmDBUserPasswordKey $ }}'
+
+  resources: {}
+  podLabels: {}
+  commonLabels: {}
+  commonAnnotations: {}
+
+# ============================ partner-api ============================
+partnerApi:
+  enabled: true
+  nameOverride: partner-api
+
+  replicaCount: 1
+  containerPort: 8000
+
+  image:
+    registry: docker.io
+    repository: openg2p/partner-management-partner-api
+    tag: develop
+    pullPolicy: Always
+
+  serviceAccount:
+    create: true
+    name: ""
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+  istio:
+    enabled: true
+    virtualservice:
+      enabled: true
+      host: '{{ tpl .Values.global.partnerApiHostname $ }}'
+      gateway: internal
+      destination: '{{ .Release.Name }}-partner-api'
+      destinationPort: 80
+      prefix: /
+      rewriteUri: ""
+
+  startupProbe:
+    enabled: true
+    httpGet:
+      path: /ping
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    enabled: true
+    httpGet:
+      path: /ping
+      port: http
+    periodSeconds: 20
+  readinessProbe:
+    enabled: true
+    httpGet:
+      path: /ping
+      port: http
+    periodSeconds: 20
+
+  envVars:
+    PARTNER_MANAGER_OPENAPI_TITLE: OpenG2P Partner Management Key Fetch API
+    PARTNER_MANAGER_HOST: 0.0.0.0
+    PARTNER_MANAGER_PORT: '{{ .Values.containerPort }}'
+    PARTNER_MANAGER_DB_HOSTNAME: '{{ .Values.global.postgresqlHost }}'
+    PARTNER_MANAGER_DB_PORT: '{{ .Values.global.pmDBPort }}'
+    PARTNER_MANAGER_DB_DBNAME: '{{ tpl .Values.global.pmDB $ }}'
+    PARTNER_MANAGER_DB_USERNAME: '{{ tpl .Values.global.pmDBUser $ }}'
+    PARTNER_MANAGER_CRYPTO_ALLOWED_ALGORITHMS: '["RS256","ES256","EdDSA"]'
+    # Public key-fetch: no caller auth.
+    COMMON_AUTH_ENABLED: "false"
+
+  envVarsFrom:
+    PARTNER_MANAGER_DB_PASSWORD:
+      secretKeyRef:
+        name: '{{ tpl .Values.global.pmDBSecret $ }}'
+        key: '{{ tpl .Values.global.pmDBUserPasswordKey $ }}'
+
+  resources: {}
+  podLabels: {}
+  commonLabels: {}
+  commonAnnotations: {}
+
+# ============================ staff-portal-ui ============================
+staffPortalUi:
+  enabled: true
+  nameOverride: staff-portal-ui
+
+  replicaCount: 1
+  containerPort: 3000
+
+  image:
+    registry: docker.io
+    repository: openg2p/partner-management-staff-portal-ui
+    tag: develop
+    pullPolicy: Always
+
+  serviceAccount:
+    create: true
+    name: ""
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  istio:
+    enabled: true
+    virtualservice:
+      enabled: true
+      host: '{{ tpl .Values.global.staffPortalUiHostname $ }}'
+      gateway: internal
+      destination: '{{ .Release.Name }}-staff-portal-ui'
+      destinationPort: 80
+      prefix: /
+      rewriteUri: ""
+
+  startupProbe:
+    enabled: true
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    enabled: true
+    tcpSocket:
+      port: http
+    periodSeconds: 20
+  readinessProbe:
+    enabled: true
+    tcpSocket:
+      port: http
+    periodSeconds: 20
+
+  envVars:
+    PORT: '{{ .Values.containerPort }}'
+    HOSTNAME: 0.0.0.0
+    # Login/profile/logout via the shared commons IAM staff-portal-api.
+    IAM_URL: '{{ .Values.global.iamServiceUrl }}'
+    # Domain calls proxied to this release's staff-portal-api.
+    STAFF_PORTAL_API_URL: 'http://{{ .Release.Name }}-staff-portal-api'
+    LOGIN_PROVIDER_ID: '{{ .Values.global.loginProviderId }}'
+    COOKIE_DOMAIN: '{{ tpl .Values.global.cookieDomain $ }}'
+    REDIRECT_URL: 'https://{{ tpl .Values.global.staffPortalUiHostname $ }}'
+    KEYCLOAK_LOGOUT_URL: '{{ tpl .Values.global.keycloakIssuerUrl $ }}/protocol/openid-connect/logout'
+
+  envVarsFrom: {}
+
+  resources: {}
+  podLabels: {}
+  commonLabels: {}
+  commonAnnotations: {}

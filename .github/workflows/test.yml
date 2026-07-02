@@ -1,0 +1,39 @@
+name: Test Partner Management API
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "core/**"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "core/**"
+  workflow_dispatch:
+    inputs:
+      fastapi_common_ref:
+        description: "openg2p-fastapi-common git ref (tag/branch)"
+        default: "develop"
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        env:
+          REF: ${{ inputs.fastapi_common_ref || 'develop' }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            "git+https://github.com/openg2p/openg2p-fastapi-common@${REF}#subdirectory=openg2p-fastapi-common" \
+            "git+https://github.com/openg2p/openg2p-fastapi-common@${REF}#subdirectory=openg2p-fastapi-auth-models" \
+            "git+https://github.com/openg2p/openg2p-fastapi-common@${REF}#subdirectory=openg2p-fastapi-auth"
+          pip install -e core/api
+          pip install pytest aiosqlite greenlet
+      - name: Run tests
+        run: pytest -q core/api/tests

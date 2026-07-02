@@ -1,0 +1,32 @@
+apiVersion: v2
+name: partner-management
+description: Helm chart for the OpenG2P Partner Management service (API + admin UI)
+type: application
+# Static placeholder — the helm-publish workflow derives the real version from
+# the branch name and overrides this at package time via `helm package --version`:
+#   develop -> 0.0.0-develop.<run-number>
+#   N.N     -> N.N.0-develop.<run-number>
+#   N.N.N   -> N.N.N (frozen release)
+version: 0.0.0-develop
+dependencies:
+  - name: common
+    repository: https://openg2p.github.io/openg2p-helm
+    version: 2.30.0
+  - name: postgres-init
+    version: 1.2.0
+    repository: https://openg2p.github.io/openg2p-helm
+    condition: postgres-init.enabled
+  - name: keycloak-init
+    version: 1.1.1
+    repository: https://openg2p.github.io/openg2p-helm
+    condition: keycloak-init.enabled
+icon: https://openg2p.github.io/openg2p-helm/openg2p-logo.png
+keywords:
+  - partner-management
+  - openg2p
+maintainers:
+  - email: info@openg2p.org
+    name: OpenG2P
+annotations:
+  catalog.cattle.io/display-name: "OpenG2P Partner Management"
+  openg2p.org/add-to-rancher: ""

@@ -1,0 +1,60 @@
+{{- if .Values.dbPasswordSync.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-db-password-sync
+  labels: {{- include "common.labels.standard" (dict "customLabels" .Values.commonLabels "context" $) | nindent 4 }}
+    app.kubernetes.io/component: db-password-sync
+  annotations:
+    # Commons Postgres is persistent, so DB roles survive uninstall/reinstall, but
+    # postgres-init only CREATEs missing roles — it never updates an existing role's
+    # password. After a Secret regen the role password drifts from the Secret and the
+    # app's startup `migrate` fails to authenticate (crash-loop, since CMD is
+    # `migrate && serve`). This hook re-syncs the role password to its Secret BEFORE
+    # the app pods start. Idempotent; no-op when the role/Secret is absent.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels: {{- include "common.labels.standard" (dict "customLabels" .Values.commonLabels "context" $) | nindent 8 }}
+        app.kubernetes.io/component: db-password-sync
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: sync
+          image: "{{ .Values.dbPasswordSync.image.repository }}:{{ .Values.dbPasswordSync.image.tag }}"
+          imagePullPolicy: {{ .Values.dbPasswordSync.image.pullPolicy }}
+          env:
+            - name: PGHOST
+              value: {{ tpl .Values.global.postgresqlHost $ | quote }}
+            - name: PGSUPERPASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbPasswordSync.superuserSecret | quote }}
+                  key: {{ .Values.dbPasswordSync.superuserPasswordKey | quote }}
+            - name: PM_USER
+              value: {{ tpl .Values.global.pmDBUser $ | quote }}
+            - name: PM_PW
+              valueFrom:
+                secretKeyRef:
+                  name: {{ tpl .Values.global.pmDBSecret $ | quote }}
+                  key: {{ tpl .Values.global.pmDBUserPasswordKey $ | quote }}
+                  optional: true
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              export PGPASSWORD="$PGSUPERPASS"
+              sync() {
+                u="$1"; p="$2"
+                [ -n "$p" ] || { echo "no secret password for role '$u' yet; skipping"; return 0; }
+                echo "Syncing password for role '$u' ..."
+                psql -h "$PGHOST" -U postgres -d postgres -v ON_ERROR_STOP=1 \
+                  -c "DO \$do\$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname='$u') THEN EXECUTE format('ALTER USER %I WITH PASSWORD %L', '$u', '$p'); END IF; END \$do\$;"
+              }
+              sync "$PM_USER" "${PM_PW:-}"
+              echo "DB role password sync complete."
+{{- end }}

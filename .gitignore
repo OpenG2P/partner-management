@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+pmvenv/
+*.db
+.env
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / UI
+node_modules/
+.next/
+out/
+ui/dist/
+next-env.d.ts
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Helm chart dependencies (fetched by `helm dep up` in CI)
+deployment/charts/*/charts/
+deployment/charts/*/Chart.lock
