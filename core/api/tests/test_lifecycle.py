@@ -71,6 +71,27 @@ def test_disable_enable(client):
     assert client.get("/keys/PARTNER_X").status_code == 200
 
 
+def test_audit_trail_recorded(client):
+    # By now PARTNER_X has been onboarded, approved, rotated, disabled, enabled.
+    events = client.get("/partners/PARTNER_X/audit").json()
+    actions = [e["action"] for e in events["events"]]
+    # Ledger captures the material state changes (append-only, newest first).
+    for expected in [
+        "partner.created",
+        "request.submitted",
+        "partner.approved",
+        "request.approved",
+        "key.added",
+        "key.revoked",
+        "partner.disabled",
+        "partner.enabled",
+    ]:
+        assert expected in actions, f"missing audit action {expected}"
+    # A revoke event carries the kid it retired.
+    revoked = [e for e in events["events"] if e["action"] == "key.revoked"]
+    assert any(e["details"].get("kid") == "key-1" for e in revoked)
+
+
 def test_reject_path(client, keys):
     client.post(
         "/partners/requests/onboarding",

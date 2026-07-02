@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from ..config import Settings
 from ..errors import PartnerNotFoundError
-from ..models import KeyStatus, Partner, PartnerKey, PartnerStatus
+from ..models import AuditAction, KeyStatus, Partner, PartnerKey, PartnerStatus
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -46,7 +46,10 @@ class PartnerService(BaseService):
             )
             return list(res.scalars().all())
 
-    async def set_status(self, partner_id: str, status: PartnerStatus, actor: str = None) -> Partner:
+    async def set_status(self, partner_id: str, status: PartnerStatus, actor: dict = None) -> Partner:
+        # Lazy import avoids a module-load cycle (audit_service imports this module).
+        from .audit_service import AuditService
+
         async with session_maker()() as session:
             res = await session.execute(
                 select(Partner).where(Partner.partner_id == partner_id)
@@ -54,9 +57,28 @@ class PartnerService(BaseService):
             partner = res.scalars().first()
             if not partner:
                 raise PartnerNotFoundError(partner_id)
+            previous = partner.status
             partner.status = status.value
             if status == PartnerStatus.active:
-                partner.approved_by = actor
+                partner.approved_by = (actor or {}).get("name")
+
+            action = (
+                AuditAction.partner_disabled
+                if status == PartnerStatus.disabled
+                else AuditAction.partner_enabled
+                if status == PartnerStatus.active
+                else None
+            )
+            if action:
+                AuditService.get_component().record(
+                    session,
+                    action=action,
+                    entity_type="partner",
+                    entity_id=partner.id,
+                    partner_id=partner_id,
+                    actor=actor,
+                    details={"from": previous, "to": status.value},
+                )
             await session.commit()
             await session.refresh(partner)
             return partner

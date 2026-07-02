@@ -53,9 +53,18 @@ class PartnerManagerAuth(JwtBearerAuth):
         return creds
 
     @staticmethod
-    def actor(creds: AuthCredentials | None) -> str | None:
-        """Best-effort human-readable identity for audit fields."""
+    def actor_info(creds: AuthCredentials | None) -> dict:
+        """Identity for audit fields: {'id': sub, 'name': human-readable}.
+
+        Both empty when auth is disabled (local dev). ``name`` prefers the login
+        handle, then email, then the subject.
+        """
         if not creds:
-            return None
+            return {"id": None, "name": None}
         data = creds.model_dump()
-        return data.get("preferred_username") or data.get("email") or data.get("sub")
+        return {
+            "id": data.get("sub"),
+            "name": data.get("preferred_username")
+            or data.get("email")
+            or data.get("sub"),
+        }

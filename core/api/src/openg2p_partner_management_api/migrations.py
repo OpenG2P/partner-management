@@ -1,7 +1,7 @@
 import logging
 
 from .config import Settings
-from .models import Partner, PartnerKey, PartnerRequest
+from .models import AuditEvent, Partner, PartnerKey, PartnerRequest
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -17,3 +17,4 @@ async def migrate_all():
     await Partner.create_migrate()
     await PartnerKey.create_migrate()
     await PartnerRequest.create_migrate()
+    await AuditEvent.create_migrate()

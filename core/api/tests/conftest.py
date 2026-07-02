@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
 from fastapi.testclient import TestClient
 
 from openg2p_partner_management_api.main import app
-from openg2p_partner_management_api.models import Partner, PartnerKey, PartnerRequest
+from openg2p_partner_management_api.migrations import migrate_all
 
 
 def _pub_pem(priv):
@@ -33,12 +33,7 @@ def _pub_pem(priv):
 
 @pytest.fixture(scope="session", autouse=True)
 def _migrate():
-    async def migrate():
-        await Partner.create_migrate()
-        await PartnerKey.create_migrate()
-        await PartnerRequest.create_migrate()
-
-    asyncio.run(migrate())
+    asyncio.run(migrate_all())
 
 
 @pytest.fixture(scope="session")

@@ -39,6 +39,19 @@ export interface Partner {
   updated_at?: string | null;
 }
 
+export interface AuditEvent {
+  id: string;
+  created_at: string;
+  actor_name?: string | null;
+  actor_id?: string | null;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  partner_id: string;
+  request_id?: string | null;
+  details: Record<string, unknown>;
+}
+
 export interface PartnerKey {
   id: string;
   partner_id: string;

@@ -1,3 +1,4 @@
+from .audit import AuditEventListResponse, AuditEventResponse
 from .key import (
     KeyInput,
     KeyResponse,
@@ -19,6 +20,8 @@ from .request import (
 )
 
 __all__ = [
+    "AuditEventResponse",
+    "AuditEventListResponse",
     "KeyInput",
     "KeyResponse",
     "PublicKeyResponse",

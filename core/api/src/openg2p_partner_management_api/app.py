@@ -8,13 +8,14 @@ _config = Settings.get_config()
 
 from openg2p_fastapi_common.app import Initializer as BaseInitializer
 
+from .audit_middleware import AuditMiddleware
 from .controllers import (
     AdminPartnerController,
     AdminRequestController,
     KeyFetchController,
 )
 from .migrations import migrate_all
-from .services import KeyService, PartnerService, RequestService
+from .services import AuditService, KeyService, PartnerService, RequestService
 
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
@@ -30,10 +31,22 @@ class Initializer(BaseInitializer):
         super().initialize()
         KeyService()
         PartnerService()
+        AuditService()
         RequestService()
         AdminRequestController().post_init()
         AdminPartnerController().post_init()
         KeyFetchController().post_init()
+        # Central Audit Manager trail (config-gated, non-blocking).
+        self.return_app().add_middleware(
+            AuditMiddleware,
+            audit_manager_url=_config.audit_manager_url,
+            enabled=_config.audit_enabled,
+            timeout_seconds=_config.audit_timeout_seconds,
+            source=_config.audit_source,
+            module=_config.audit_module,
+            client_id=_config.auth_admin_client_id,
+            audit_anonymous_failures=_config.audit_anonymous_failures,
+        )
 
     def migrate_database(self, args):
         super().migrate_database(args)

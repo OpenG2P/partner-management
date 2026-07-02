@@ -47,3 +47,14 @@ class Settings(BaseSettings):
     # openg2p-fastapi-auth. Set auth_admin_role="" to require only a valid token.
     auth_admin_role: str = "partner_manager"
     auth_admin_client_id: str = "partner-management"
+
+    # --- Central Audit Manager (long-term forensic trail) --------------------
+    # Off by default; emission requires audit_enabled=true AND a manager URL.
+    # Delivery is fire-and-forget and never blocks or fails a request. This is
+    # complementary to the local pm_audit_events ledger, which is always on.
+    audit_enabled: bool = False
+    audit_manager_url: str = ""
+    audit_timeout_seconds: float = 2.0
+    audit_source: str = "/openg2p/partner-management"
+    audit_module: str = "partner-management"
+    audit_anonymous_failures: bool = True

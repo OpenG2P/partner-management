@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Partner, PartnerKey } from "@/lib/types";
+import { AuditEvent, Partner, PartnerKey } from "@/lib/types";
 import {
   PageHeader,
   StatusPill,
@@ -18,17 +18,22 @@ export default function PartnerDetailPage() {
   const partnerId = decodeURIComponent(params.partnerId);
   const [partner, setPartner] = useState<Partner | null>(null);
   const [keys, setKeys] = useState<PartnerKey[]>([]);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [p, k] = await Promise.all([
+      const [p, k, a] = await Promise.all([
         api.get<Partner>(`/partners/${encodeURIComponent(partnerId)}`),
         api.get<PartnerKey[]>(`/partners/${encodeURIComponent(partnerId)}/keys`),
+        api.get<{ events: AuditEvent[] }>(
+          `/partners/${encodeURIComponent(partnerId)}/audit`
+        ),
       ]);
       setPartner(p);
       setKeys(k);
+      setAudit(a.events);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -134,6 +139,38 @@ export default function PartnerDetailPage() {
                   </td>
                   <td>{fmtDate(k.not_before)}</td>
                   <td>{fmtDate(k.not_after)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h2 className="text-lg mt-6 mb-3">History</h2>
+      {audit.length === 0 ? (
+        <div className="card text-[color:var(--color-text-muted)]">No activity yet.</div>
+      ) : (
+        <div className="card p-0 overflow-hidden">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Action</th>
+                <th>By</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {audit.map((e) => (
+                <tr key={e.id}>
+                  <td className="whitespace-nowrap">{fmtDate(e.created_at)}</td>
+                  <td className="font-medium">{e.action}</td>
+                  <td>{e.actor_name || "—"}</td>
+                  <td className="text-[color:var(--color-text-muted)]">
+                    {Object.keys(e.details || {}).length
+                      ? JSON.stringify(e.details)
+                      : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>

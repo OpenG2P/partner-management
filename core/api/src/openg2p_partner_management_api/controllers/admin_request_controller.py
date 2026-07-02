@@ -72,7 +72,7 @@ class AdminRequestController(BaseController):
         data: OnboardingRequestCreate,
         auth: Annotated[AuthCredentials, Depends(_admin_auth)],
     ) -> PartnerRequestResponse:
-        req = await self.requests.create_onboarding(data, actor=PartnerManagerAuth.actor(auth))
+        req = await self.requests.create_onboarding(data, actor=PartnerManagerAuth.actor_info(auth))
         return PartnerRequestResponse.model_validate(req)
 
     async def create_key_update(
@@ -80,7 +80,7 @@ class AdminRequestController(BaseController):
         data: KeyUpdateRequestCreate,
         auth: Annotated[AuthCredentials, Depends(_admin_auth)],
     ) -> PartnerRequestResponse:
-        req = await self.requests.create_key_update(data, actor=PartnerManagerAuth.actor(auth))
+        req = await self.requests.create_key_update(data, actor=PartnerManagerAuth.actor_info(auth))
         return PartnerRequestResponse.model_validate(req)
 
     async def list_requests(
@@ -110,7 +110,7 @@ class AdminRequestController(BaseController):
         review: RequestReview = RequestReview(),
     ) -> PartnerRequestResponse:
         req = await self.requests.approve(
-            request_id, actor=PartnerManagerAuth.actor(auth), notes=review.notes
+            request_id, actor=PartnerManagerAuth.actor_info(auth), notes=review.notes
         )
         return PartnerRequestResponse.model_validate(req)
 
@@ -121,6 +121,6 @@ class AdminRequestController(BaseController):
         review: RequestReview = RequestReview(),
     ) -> PartnerRequestResponse:
         req = await self.requests.reject(
-            request_id, actor=PartnerManagerAuth.actor(auth), notes=review.notes
+            request_id, actor=PartnerManagerAuth.actor_info(auth), notes=review.notes
         )
         return PartnerRequestResponse.model_validate(req)
