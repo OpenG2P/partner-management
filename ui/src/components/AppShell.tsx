@@ -22,16 +22,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="w-[260px] shrink-0 bg-[color:var(--color-brand-black)] text-white flex flex-col">
-        <div className="px-5 py-5 border-b border-white/10">
+      <aside className="w-[280px] shrink-0 bg-[color:var(--color-brand-black)] text-white flex flex-col">
+        <div className="px-6 py-6 border-b border-white/10">
           <Image
             src="/openg2p-logo-dark.svg"
             alt="OpenG2P"
-            width={150}
-            height={34}
+            width={167}
+            height={38}
             priority
+            className="h-auto w-[167px]"
           />
-          <div className="mt-3 text-sm text-white/70 font-[family-name:var(--font-roboto-slab)]">
+          <div className="mt-5 text-xl font-medium text-white font-[family-name:var(--font-roboto-slab)]">
             Partner Management
           </div>
         </div>
