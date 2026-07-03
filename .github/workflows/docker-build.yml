@@ -1,8 +1,13 @@
 name: Publish Partner Management Dockers
 
 # Builds the images from the LOCAL in-repo source (core/ and ui/). The image tag
-# is the repository ref (branch name or git tag). External OpenG2P libs are not in
-# this repo; their ref is a workflow_dispatch input (default below).
+# is the repository ref (branch name or git tag). Only the image(s) whose sources
+# changed are rebuilt:
+#   core/**              -> both API images (they share the core/api package)
+#   ui/**                -> staff-portal-ui image
+#   docker/<name>/**     -> that one image
+#   the workflow file    -> all images
+# A manual run (workflow_dispatch) or a tag push rebuilds all images.
 on:
   push:
     branches:
@@ -22,22 +27,80 @@ on:
         type: string
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      staff-portal-api: ${{ steps.filter.outputs.staff-portal-api }}
+      partner-api: ${{ steps.filter.outputs.partner-api }}
+      staff-portal-ui: ${{ steps.filter.outputs.staff-portal-ui }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - '.github/workflows/docker-build.yml'
+            staff-portal-api:
+              - *shared
+              - 'core/**'
+              - 'docker/staff-portal-api/**'
+            partner-api:
+              - *shared
+              - 'core/**'
+              - 'docker/partner-api/**'
+            staff-portal-ui:
+              - *shared
+              - 'ui/**'
+              - 'docker/staff-portal-ui/**'
+
+  setup:
+    needs: changes
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      any: ${{ steps.set-matrix.outputs.any }}
+    steps:
+      - id: set-matrix
+        shell: python
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IS_TAG: ${{ github.ref_type == 'tag' }}
+          CHANGED_STAFF_PORTAL_API: ${{ needs.changes.outputs.staff-portal-api }}
+          CHANGED_PARTNER_API: ${{ needs.changes.outputs.partner-api }}
+          CHANGED_STAFF_PORTAL_UI: ${{ needs.changes.outputs.staff-portal-ui }}
+        run: |
+          import os, json
+
+          ALL = [
+              {"name": "staff-portal-api", "image": "openg2p/partner-management-staff-portal-api", "dockerfile": "docker/staff-portal-api/Dockerfile", "changed_env": "CHANGED_STAFF_PORTAL_API"},
+              {"name": "partner-api",      "image": "openg2p/partner-management-partner-api",      "dockerfile": "docker/partner-api/Dockerfile",      "changed_env": "CHANGED_PARTNER_API"},
+              {"name": "staff-portal-ui",  "image": "openg2p/partner-management-staff-portal-ui",  "dockerfile": "docker/staff-portal-ui/Dockerfile",  "changed_env": "CHANGED_STAFF_PORTAL_UI"},
+          ]
+
+          def entry(s):
+              return {k: s[k] for k in ("name", "image", "dockerfile")}
+
+          # A manual run or a tag (release) push rebuilds everything.
+          build_all = os.environ.get("EVENT_NAME") == "workflow_dispatch" or os.environ.get("IS_TAG") == "true"
+
+          if build_all:
+              include = [entry(s) for s in ALL]
+          else:
+              include = [entry(s) for s in ALL if os.environ.get(s["changed_env"]) == "true"]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("matrix=" + json.dumps({"include": include}) + "\n")
+              f.write("any=" + ("true" if include else "false") + "\n")
+
   docker-build:
+    needs: setup
+    if: ${{ needs.setup.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     name: Docker - ${{ matrix.name }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: staff-portal-api
-            image: openg2p/partner-management-staff-portal-api
-            dockerfile: docker/staff-portal-api/Dockerfile
-          - name: partner-api
-            image: openg2p/partner-management-partner-api
-            dockerfile: docker/partner-api/Dockerfile
-          - name: staff-portal-ui
-            image: openg2p/partner-management-staff-portal-ui
-            dockerfile: docker/staff-portal-ui/Dockerfile
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
