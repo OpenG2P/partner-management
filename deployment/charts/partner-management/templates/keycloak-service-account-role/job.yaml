@@ -1,0 +1,96 @@
+{{- /*
+Grant the admin role (partner_manager) to the staff-portal client's SERVICE
+ACCOUNT.
+
+Why this exists: keycloak-init (above) maps `partner_manager` to the human `admin`
+USER, which is enough for the staff-portal UI. But automated/headless partner
+onboarding (e.g. the G2P Bridge's pm-register Job) authenticates with the
+client-credentials grant, whose token is the client's SERVICE ACCOUNT — and the
+service account has no client roles by default, so PM's admin API rejects it with
+403. The keycloak-init chart (v1.1.1) can map client roles to users but NOT to a
+service account, so we do that one assignment here.
+
+The client already has serviceAccountsEnabled=true (confidential client default),
+so only the role mapping is missing. This Job is idempotent (re-adding an existing
+mapping is a no-op) and safe to run on every install/upgrade.
+*/ -}}
+{{- if .Values.keycloakServiceAccountRole.enabled }}
+{{- $kc := index .Values "keycloak-init" "keycloak" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-kc-sa-role
+  labels: {{- include "common.labels.standard" (dict "customLabels" .Values.commonLabels "context" $) | nindent 4 }}
+  {{- with .Values.keycloakServiceAccountRole.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.keycloakServiceAccountRole.backoffLimit | default 3 }}
+  ttlSecondsAfterFinished: {{ .Values.keycloakServiceAccountRole.ttlSecondsAfterFinished | default 600 }}
+  template:
+    metadata:
+      labels: {{- include "common.labels.standard" (dict "customLabels" .Values.commonLabels "context" $) | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.staffPortalApi.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: assign-role
+          image: "{{ .Values.staffPortalApi.image.registry }}/{{ .Values.staffPortalApi.image.repository }}:{{ .Values.staffPortalApi.image.tag }}"
+          imagePullPolicy: {{ .Values.staffPortalApi.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: KEYCLOAK_URL
+              value: {{ tpl $kc.url $ | quote }}
+            - name: KEYCLOAK_REALM
+              value: {{ tpl .Values.global.keycloakRealm $ | quote }}
+            - name: KEYCLOAK_ADMIN_USER
+              value: {{ $kc.user | quote }}
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ tpl $kc.existingSecret $ | quote }}
+                  key: {{ $kc.existingSecretKey | quote }}
+            - name: CLIENT_ID
+              value: {{ tpl .Values.global.authClientId $ | quote }}
+            - name: ADMIN_ROLE
+              value: {{ .Values.global.authAdminRole | quote }}
+          command: ["python", "-c"]
+          args:
+            - |
+              import os, sys, httpx
+              kc = os.environ["KEYCLOAK_URL"].rstrip("/")
+              realm = os.environ["KEYCLOAK_REALM"]
+              client_id = os.environ["CLIENT_ID"]
+              role_name = os.environ["ADMIN_ROLE"]
+              tok = httpx.post(
+                  f"{kc}/realms/master/protocol/openid-connect/token",
+                  data={"grant_type": "password", "client_id": "admin-cli",
+                        "username": os.environ["KEYCLOAK_ADMIN_USER"],
+                        "password": os.environ["KEYCLOAK_ADMIN_PASSWORD"]},
+                  timeout=30,
+              ).raise_for_status().json()["access_token"]
+              h = {"Authorization": f"Bearer {tok}"}
+              cs = httpx.get(f"{kc}/admin/realms/{realm}/clients",
+                             params={"clientId": client_id}, headers=h, timeout=30).json()
+              if not cs:
+                  sys.exit(f"[kc-sa-role] client '{client_id}' not found in realm '{realm}'")
+              cid = cs[0]["id"]
+              if not cs[0].get("serviceAccountsEnabled"):
+                  sys.exit(f"[kc-sa-role] client '{client_id}' has serviceAccountsEnabled=false")
+              role = httpx.get(f"{kc}/admin/realms/{realm}/clients/{cid}/roles/{role_name}",
+                               headers=h, timeout=30)
+              if role.status_code != 200:
+                  sys.exit(f"[kc-sa-role] client role '{role_name}' not found on '{client_id}'")
+              role = role.json()
+              sa = httpx.get(f"{kc}/admin/realms/{realm}/clients/{cid}/service-account-user",
+                             headers=h, timeout=30).json()
+              # POST is idempotent — re-adding an existing mapping is a no-op.
+              r = httpx.post(
+                  f"{kc}/admin/realms/{realm}/users/{sa['id']}/role-mappings/clients/{cid}",
+                  headers=h, json=[{"id": role["id"], "name": role["name"]}], timeout=30,
+              )
+              if r.status_code not in (204, 200):
+                  sys.exit(f"[kc-sa-role] role assign failed: {r.status_code} {r.text}")
+              print(f"[kc-sa-role] '{role_name}' assigned to service account of '{client_id}'")
+{{- end }}

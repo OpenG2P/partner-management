@@ -96,6 +96,26 @@ keycloak-init:
             '{{ .Release.Name }}-staff-portal':
               - partner_manager
 
+# ==================== Keycloak service-account role ====================
+# keycloak-init (above) grants partner_manager to the human `admin` USER (staff
+# portal UI). Headless onboarding (e.g. the G2P Bridge pm-register Job) uses the
+# client-credentials grant, whose token is the client's SERVICE ACCOUNT — which
+# has no client roles by default, so PM's admin API returns 403. keycloak-init
+# v1.1.1 cannot map a role to a service account, so this Job does that one
+# assignment (idempotent). See templates/keycloak-service-account-role/job.yaml.
+keycloakServiceAccountRole:
+  enabled: true
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  # Runs as a post-install/post-upgrade hook AFTER keycloak-init created the
+  # client (weight 1 > keycloak-init's). In the commons install (Rancher skips
+  # Helm hooks), null these annotations like commons does for pm-pg-init/pm-kc-init
+  # so it runs as a regular resource.
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+
 # ============================ staff-portal-api ============================
 staffPortalApi:
   enabled: true
