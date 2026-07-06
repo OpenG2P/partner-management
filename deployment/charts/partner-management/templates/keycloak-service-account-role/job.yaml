@@ -19,7 +19,10 @@ mapping is a no-op) and safe to run on every install/upgrade.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-kc-sa-role
+  # Revision suffix so each helm upgrade creates a fresh Job — Job specs are
+  # immutable, so a fixed name would fail to patch when run as a regular resource
+  # (Rancher/commons mode). Old Jobs self-clean via ttlSecondsAfterFinished.
+  name: {{ .Release.Name }}-kc-sa-role-{{ .Release.Revision }}
   labels: {{- include "common.labels.standard" (dict "customLabels" .Values.commonLabels "context" $) | nindent 4 }}
   {{- with .Values.keycloakServiceAccountRole.annotations }}
   annotations: {{- toYaml . | nindent 4 }}
