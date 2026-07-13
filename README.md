@@ -17,7 +17,7 @@ partner-management/
 ├── ui/              Staff portal (Next.js, OpenG2P/AWE branding, IAM login)
 ├── docker/          Dockerfiles: staff-portal-api, partner-api, staff-portal-ui
 ├── deployment/      Helm chart (deployment/charts/partner-management)
-└── .github/         CI workflows (docker build, helm publish, tests)
+└── .github/         CI: build-publish (central openg2p-packaging@v1 pipeline) + test
 ```
 
 Following the national-social-registry pattern, the backend is split into two
