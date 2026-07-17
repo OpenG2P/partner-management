@@ -125,8 +125,8 @@ staffPortalApi:
   containerPort: 8000
 
   image:
-    registry: docker.io
-    repository: openg2p/partner-management-staff-portal-api
+    registry: registry.gitlab.com
+    repository: openg2p/partner-management/staff-portal-api
     tag: develop
     pullPolicy: Always
 
@@ -217,8 +217,8 @@ partnerApi:
   containerPort: 8000
 
   image:
-    registry: docker.io
-    repository: openg2p/partner-management-partner-api
+    registry: registry.gitlab.com
+    repository: openg2p/partner-management/partner-api
     tag: develop
     pullPolicy: Always
 
@@ -300,8 +300,8 @@ staffPortalUi:
   containerPort: 3000
 
   image:
-    registry: docker.io
-    repository: openg2p/partner-management-staff-portal-ui
+    registry: registry.gitlab.com
+    repository: openg2p/partner-management/staff-portal-ui
     tag: develop
     pullPolicy: Always
 
