@@ -41,7 +41,12 @@ global:
   auditManagerUrl: 'http://commons-services-auditmanager:80'
   auditAnonymousFailures: true
 
-  imageRegistry: docker.io
+  # Leave EMPTY so each image uses its own `registry` (the OpenG2P images are on
+  # GitLab: registry.gitlab.com/openg2p/partner-management/*; the third-party
+  # postgresql-client stays on Docker Hub). A non-empty global.imageRegistry
+  # OVERRIDES every component's registry (Bitnami common convention), which is
+  # what pointed the images at docker.io by mistake after the move to GitLab.
+  imageRegistry: ""
   imagePullSecrets: []
 
 # ---- Re-sync DB role password to its Secret before app pods start (see g2p-bridge). ----
