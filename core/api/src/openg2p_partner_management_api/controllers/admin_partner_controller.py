@@ -2,10 +2,9 @@ import logging
 from typing import Annotated, Optional
 
 from fastapi import Depends
-from openg2p_fastapi_auth_models.schemas import AuthCredentials
 from openg2p_fastapi_common.controller import BaseController
 
-from ..auth import PartnerManagerAuth
+from ..auth import AuthCredentials, PartnerManagerAuth
 from ..config import Settings
 from ..errors import PartnerNotFoundError
 from ..models import PartnerStatus

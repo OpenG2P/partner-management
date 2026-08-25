@@ -4,7 +4,7 @@ Central registry of OpenG2P **partners** and their **public keys**. All OpenG2P
 modules (g2p-bridge, consent-manager, …) fetch partner public keys from this
 service instead of maintaining their own partner tables.
 
-Built on [`openg2p-fastapi-common`](https://github.com/OpenG2P/openg2p-fastapi-common).
+Built on [`openg2p-fastapi-common`](https://gitlab.com/openg2p/shared-libraries/fastapi-common).
 
 ## What it does
 
