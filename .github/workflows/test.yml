@@ -13,7 +13,7 @@ on:
     inputs:
       fastapi_common_ref:
         description: "openg2p-fastapi-common git ref (tag/branch)"
-        default: "develop"
+        default: "1.2"
         type: string
 
 jobs:
@@ -26,13 +26,11 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         env:
-          REF: ${{ inputs.fastapi_common_ref || 'develop' }}
+          REF: ${{ inputs.fastapi_common_ref || '1.2' }}
         run: |
           python -m pip install --upgrade pip
           pip install \
-            "git+https://github.com/openg2p/openg2p-fastapi-common@${REF}#subdirectory=openg2p-fastapi-common" \
-            "git+https://github.com/openg2p/openg2p-fastapi-common@${REF}#subdirectory=openg2p-fastapi-auth-models" \
-            "git+https://github.com/openg2p/openg2p-fastapi-common@${REF}#subdirectory=openg2p-fastapi-auth"
+            "git+https://gitlab.com/openg2p/shared-libraries/fastapi-common.git@${REF}#subdirectory=openg2p-fastapi-common"
           pip install -e core/api
           pip install pytest aiosqlite greenlet
       - name: Run tests

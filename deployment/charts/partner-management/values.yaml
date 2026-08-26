@@ -26,6 +26,10 @@ global:
   # client role under it. The staff-portal-api authorizes admins on this role.
   authClientId: '{{ .Release.Name }}-staff-portal'
   authAdminRole: partner_manager
+  # K8s Secret holding the OIDC client password (named after the clientId by
+  # keycloak-init). Used by the iam-register Job for client_credentials.
+  authClientSecret: '{{ .Release.Name }}-staff-portal'
+  authClientSecretKey: client_secret
 
   # --- Shared commons IAM staff-portal-api (login/profile/logout for the UI) ---
   iamServiceUrl: 'http://commons-services-iam-staff-portal-api'
@@ -121,6 +125,36 @@ keycloakServiceAccountRole:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "1"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+
+# ============================ IAM registration ============================
+# Pushes the Partner Management tile into IAM staff_portal_applications.
+# application_mnemonic = global.authClientId. Commons/Rancher skips Helm hooks
+# — null the annotations there so this Job runs as a regular resource.
+iamRegister:
+  enabled: true
+  applicationDescription: "Partner Management"
+  image:
+    repository: curlimages/curl
+    tag: "8.11.1"
+    pullPolicy: IfNotPresent
+  backoffLimit: 5
+  tokenMaxAttempts: 30
+  registerMaxAttempts: 10
+  ttlSecondsAfterFinished: 600
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  payloadAnnotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "19"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
 
 # ============================ staff-portal-api ============================
 staffPortalApi:
