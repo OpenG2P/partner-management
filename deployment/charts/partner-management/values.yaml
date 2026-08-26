@@ -193,9 +193,9 @@ staffPortalApi:
     PARTNER_MANAGER_AUTH_ADMIN_ROLE: '{{ .Values.global.authAdminRole }}'
     PARTNER_MANAGER_AUTH_ADMIN_CLIENT_ID: '{{ tpl .Values.global.authClientId $ }}'
     PARTNER_MANAGER_CRYPTO_ALLOWED_ALGORITHMS: '["RS256","ES256","EdDSA"]'
-    COMMON_AUTH_ENABLED: "true"
-    COMMON_AUTH_DEFAULT_ISSUERS: '["{{ tpl .Values.global.keycloakIssuerUrl $ }}"]'
-    COMMON_AUTH_DEFAULT_JWKS_URLS: '["{{ tpl .Values.global.keycloakIssuerUrl $ }}/protocol/openid-connect/certs"]'
+    PARTNER_MANAGER_AUTH_ENABLED: "true"
+    PARTNER_MANAGER_AUTH_DEFAULT_ISSUERS: '["{{ tpl .Values.global.keycloakIssuerUrl $ }}"]'
+    PARTNER_MANAGER_AUTH_DEFAULT_JWKS_URLS: '["{{ tpl .Values.global.keycloakIssuerUrl $ }}/protocol/openid-connect/certs"]'
     # Central Audit Manager (the local ledger is always on regardless).
     PARTNER_MANAGER_AUDIT_ENABLED: '{{ .Values.global.auditEnabled }}'
     PARTNER_MANAGER_AUDIT_MANAGER_URL: '{{ .Values.global.auditManagerUrl }}'
@@ -284,7 +284,7 @@ partnerApi:
     PARTNER_MANAGER_DB_USERNAME: '{{ tpl .Values.global.pmDBUser $ }}'
     PARTNER_MANAGER_CRYPTO_ALLOWED_ALGORITHMS: '["RS256","ES256","EdDSA"]'
     # Public key-fetch: no caller auth.
-    COMMON_AUTH_ENABLED: "false"
+    PARTNER_MANAGER_AUTH_ENABLED: "false"
 
   envVarsFrom:
     PARTNER_MANAGER_DB_PASSWORD:
