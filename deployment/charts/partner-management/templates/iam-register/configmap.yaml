@@ -1,0 +1,18 @@
+{{- if .Values.iamRegister.enabled }}
+# Catalog this Partner Management release pushes into IAM.
+# application_mnemonic and application_url are substituted at runtime.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-{{ .Chart.Name }}-iam-register-payload
+  labels:
+    app.kubernetes.io/name: iam-register
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  {{- with .Values.iamRegister.payloadAnnotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  payload.json: |-
+{{ .Files.Get "files/iam-registration/payload.json" | indent 4 }}
+{{- end }}

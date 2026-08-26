@@ -23,8 +23,8 @@ variables:
         "pins": [
           {
             "arg": "FASTAPI_COMMON_REF",
-            "repo": "https://github.com/openg2p/openg2p-fastapi-common",
-            "ref": "develop"
+            "repo": "https://gitlab.com/openg2p/shared-libraries/fastapi-common",
+            "ref": "1.2"
           }
         ]
       },
@@ -34,8 +34,8 @@ variables:
         "pins": [
           {
             "arg": "FASTAPI_COMMON_REF",
-            "repo": "https://github.com/openg2p/openg2p-fastapi-common",
-            "ref": "develop"
+            "repo": "https://gitlab.com/openg2p/shared-libraries/fastapi-common",
+            "ref": "1.2"
           }
         ]
       },

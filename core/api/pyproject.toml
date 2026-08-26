@@ -17,9 +17,8 @@ classifiers = [
 ]
 dependencies = [
   "openg2p-fastapi-common",
-  "openg2p-fastapi-auth",
-  "openg2p-fastapi-auth-models",
   "cryptography",
+  "python-jose",
   "pyjwt",
   "httpx",
   "asyncpg",

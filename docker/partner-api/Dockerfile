@@ -2,7 +2,7 @@
 # Build context = repo root.
 FROM python:3.12-alpine
 
-ARG FASTAPI_COMMON_REF=develop
+ARG FASTAPI_COMMON_REF=1.2
 
 RUN apk add --no-cache --virtual .build-deps gcc libc-dev linux-headers make \
  && apk add --no-cache bash git gettext libpq-dev libffi-dev openssl-dev
@@ -10,9 +10,7 @@ RUN apk add --no-cache --virtual .build-deps gcc libc-dev linux-headers make \
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
-    "git+https://github.com/openg2p/openg2p-fastapi-common@${FASTAPI_COMMON_REF}#subdirectory=openg2p-fastapi-common" \
-    "git+https://github.com/openg2p/openg2p-fastapi-common@${FASTAPI_COMMON_REF}#subdirectory=openg2p-fastapi-auth-models" \
-    "git+https://github.com/openg2p/openg2p-fastapi-common@${FASTAPI_COMMON_REF}#subdirectory=openg2p-fastapi-auth"
+    "git+https://gitlab.com/openg2p/shared-libraries/fastapi-common.git@${FASTAPI_COMMON_REF}#subdirectory=openg2p-fastapi-common"
 
 COPY core/api /src/api
 RUN pip install --no-cache-dir /src/api

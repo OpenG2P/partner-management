@@ -1,7 +1,16 @@
 from openg2p_fastapi_common.config import Settings as BaseSettings
+from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from . import __version__
+
+_COMMON_AUTH_ENV = {
+    "auth_enabled": "COMMON_AUTH_ENABLED",
+    "auth_default_issuers": "COMMON_AUTH_DEFAULT_ISSUERS",
+    "auth_default_audiences": "COMMON_AUTH_DEFAULT_AUDIENCES",
+    "auth_default_jwks_urls": "COMMON_AUTH_DEFAULT_JWKS_URLS",
+    "auth_default_id_token_verify_at_hash": "COMMON_AUTH_DEFAULT_ID_TOKEN_VERIFY_AT_HASH",
+}
 
 
 class Settings(BaseSettings):
@@ -43,10 +52,15 @@ class Settings(BaseSettings):
     # --- Admin auth (Keycloak staff realm) -----------------------------------
     # A caller must present a staff-realm JWT carrying this role (realm role or a
     # client role under auth_admin_client_id) to use the admin APIs. JWT issuer /
-    # JWKS / audience are configured via the COMMON_AUTH_* env vars consumed by
-    # openg2p-fastapi-auth. Set auth_admin_role="" to require only a valid token.
+    # JWKS / audience are configured via COMMON_AUTH_* (Helm) or
+    # PARTNER_MANAGER_AUTH_*. Set auth_admin_role="" to require only a valid token.
     auth_admin_role: str = "partner_manager"
     auth_admin_client_id: str = "partner-management"
+    auth_enabled: bool = True
+    auth_default_issuers: list[str] = []
+    auth_default_audiences: list[str] = []
+    auth_default_jwks_urls: list[str] = []
+    auth_default_id_token_verify_at_hash: bool = True
 
     # --- Central Audit Manager (long-term forensic trail) --------------------
     # Off by default; emission requires audit_enabled=true AND a manager URL.
@@ -58,3 +72,22 @@ class Settings(BaseSettings):
     audit_source: str = "/openg2p/partner-management"
     audit_module: str = "partner-management"
     audit_anonymous_failures: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def absorb_common_auth_env(cls, data):
+        """Helm still sets COMMON_AUTH_*; honour those when partner_manager_ is unset."""
+        import os
+
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        for field, env_name in _COMMON_AUTH_ENV.items():
+            if field in out:
+                continue
+            value = os.getenv(env_name)
+            if value is not None:
+                out[field] = value
+        return out
