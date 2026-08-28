@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install \
-            "git+https://gitlab.com/openg2p/shared-libraries/fastapi-common.git@${REF}#subdirectory=openg2p-fastapi-common"
+            "git+https://github.com/openg2p/openg2p-fastapi-common.git@${REF}#subdirectory=openg2p-fastapi-common"
           pip install -e core/api
           pip install pytest aiosqlite greenlet
       - name: Run tests

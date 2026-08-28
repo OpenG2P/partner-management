@@ -10,7 +10,7 @@ RUN apk add --no-cache --virtual .build-deps gcc libc-dev linux-headers make \
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
-    "git+https://gitlab.com/openg2p/shared-libraries/fastapi-common.git@${FASTAPI_COMMON_REF}#subdirectory=openg2p-fastapi-common"
+    "git+https://github.com/openg2p/openg2p-fastapi-common.git@${FASTAPI_COMMON_REF}#subdirectory=openg2p-fastapi-common"
 
 COPY core/api /src/api
 RUN pip install --no-cache-dir /src/api

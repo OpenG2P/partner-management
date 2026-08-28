@@ -46,7 +46,6 @@ global:
   auditAnonymousFailures: true
 
   # Leave EMPTY so each image uses its own `registry` (the OpenG2P images are on
-  # GitLab: registry.gitlab.com/openg2p/platform-services/partner-management/*;
   # the third-party postgresql-client stays on Docker Hub). A non-empty
   # global.imageRegistry OVERRIDES every component's registry (Bitnami common
   # convention), which is what pointed the images at docker.io by mistake after
@@ -165,8 +164,7 @@ staffPortalApi:
   containerPort: 8000
 
   image:
-    registry: registry.gitlab.com
-    repository: openg2p/platform-services/partner-management/staff-portal-api
+    repository: openg2p/partner-management-staff-portal-api
     tag: develop
     pullPolicy: Always
 
@@ -257,8 +255,7 @@ partnerApi:
   containerPort: 8000
 
   image:
-    registry: registry.gitlab.com
-    repository: openg2p/platform-services/partner-management/partner-api
+    repository: openg2p/partner-management-partner-api
     tag: develop
     pullPolicy: Always
 
@@ -340,8 +337,7 @@ staffPortalUi:
   containerPort: 3000
 
   image:
-    registry: registry.gitlab.com
-    repository: openg2p/platform-services/partner-management/staff-portal-ui
+    repository: openg2p/partner-management-staff-portal-ui
     tag: develop
     pullPolicy: Always
 
