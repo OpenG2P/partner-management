@@ -40,7 +40,7 @@ spec:
       {{- end }}
       containers:
         - name: assign-role
-          image: "{{ .Values.staffPortalApi.image.registry }}/{{ .Values.staffPortalApi.image.repository }}:{{ .Values.staffPortalApi.image.tag }}"
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.staffPortalApi.image "global" .Values.global) }}
           imagePullPolicy: {{ .Values.staffPortalApi.image.pullPolicy | default "IfNotPresent" }}
           env:
             - name: KEYCLOAK_URL
