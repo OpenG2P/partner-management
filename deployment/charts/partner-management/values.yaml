@@ -165,7 +165,7 @@ staffPortalApi:
 
   image:
     repository: openg2p/partner-management-staff-portal-api
-    tag: develop
+    tag: "1.0.2"
     pullPolicy: Always
 
   serviceAccount:
@@ -256,7 +256,7 @@ partnerApi:
 
   image:
     repository: openg2p/partner-management-partner-api
-    tag: develop
+    tag: "1.0.2"
     pullPolicy: Always
 
   serviceAccount:
@@ -338,7 +338,7 @@ staffPortalUi:
 
   image:
     repository: openg2p/partner-management-staff-portal-ui
-    tag: develop
+    tag: "1.0.2"
     pullPolicy: Always
 
   serviceAccount:
