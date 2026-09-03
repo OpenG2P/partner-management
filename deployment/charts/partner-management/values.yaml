@@ -11,6 +11,11 @@ global:
   # the clientId), same reasoning as g2p-bridge.
   pmDBSecret: '{{ .Release.Name }}-db'
   pmDBUserPasswordKey: '{{ .Release.Name }}-db-user'
+  # SQLAlchemy pool per gunicorn worker process. Defaults match fastapi-common.
+  dbPoolSize: 5
+  dbPoolMaxOverflow: 10
+  dbPoolPrePing: true
+  dbPoolRecycle: 1800
 
   # --- Hostnames ---
   staffPortalUiHostname: 'partner-management.{{ .Values.global.namespace | default .Release.Namespace }}.openg2p.org'
@@ -222,6 +227,10 @@ staffPortalApi:
     PARTNER_MANAGER_DB_PORT: '{{ .Values.global.pmDBPort }}'
     PARTNER_MANAGER_DB_DBNAME: '{{ tpl .Values.global.pmDB $ }}'
     PARTNER_MANAGER_DB_USERNAME: '{{ tpl .Values.global.pmDBUser $ }}'
+    PARTNER_MANAGER_DB_POOL_SIZE: '{{ .Values.global.dbPoolSize }}'
+    PARTNER_MANAGER_DB_POOL_MAX_OVERFLOW: '{{ .Values.global.dbPoolMaxOverflow }}'
+    PARTNER_MANAGER_DB_POOL_PRE_PING: '{{ .Values.global.dbPoolPrePing }}'
+    PARTNER_MANAGER_DB_POOL_RECYCLE: '{{ .Values.global.dbPoolRecycle }}'
     PARTNER_MANAGER_AUTH_ADMIN_ROLE: '{{ .Values.global.authAdminRole }}'
     PARTNER_MANAGER_AUTH_ADMIN_CLIENT_ID: '{{ tpl .Values.global.authClientId $ }}'
     PARTNER_MANAGER_CRYPTO_ALLOWED_ALGORITHMS: '["RS256","ES256","EdDSA"]'
@@ -313,6 +322,10 @@ partnerApi:
     PARTNER_MANAGER_DB_PORT: '{{ .Values.global.pmDBPort }}'
     PARTNER_MANAGER_DB_DBNAME: '{{ tpl .Values.global.pmDB $ }}'
     PARTNER_MANAGER_DB_USERNAME: '{{ tpl .Values.global.pmDBUser $ }}'
+    PARTNER_MANAGER_DB_POOL_SIZE: '{{ .Values.global.dbPoolSize }}'
+    PARTNER_MANAGER_DB_POOL_MAX_OVERFLOW: '{{ .Values.global.dbPoolMaxOverflow }}'
+    PARTNER_MANAGER_DB_POOL_PRE_PING: '{{ .Values.global.dbPoolPrePing }}'
+    PARTNER_MANAGER_DB_POOL_RECYCLE: '{{ .Values.global.dbPoolRecycle }}'
     PARTNER_MANAGER_CRYPTO_ALLOWED_ALGORITHMS: '["RS256","ES256","EdDSA"]'
     # Public key-fetch: no caller auth.
     PARTNER_MANAGER_AUTH_ENABLED: "false"

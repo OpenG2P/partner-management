@@ -1,10 +1,9 @@
 import logging
 from datetime import datetime
 
-from openg2p_fastapi_common.context import dbengine
+from openg2p_fastapi_common.context import get_async_session_maker
 from openg2p_fastapi_common.service import BaseService
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from ..config import Settings
 from ..errors import PartnerNotFoundError
@@ -14,22 +13,20 @@ _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
-def session_maker():
-    return async_sessionmaker(dbengine.get(), expire_on_commit=False)
-
-
 class PartnerService(BaseService):
     """Read/lifecycle operations on partners and the fail-closed key lookup."""
 
     async def get_partner(self, partner_id: str) -> Partner | None:
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             res = await session.execute(
                 select(Partner).where(Partner.partner_id == partner_id)
             )
             return res.scalars().first()
 
     async def list_partners(self, status: str = None) -> list[Partner]:
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             stmt = select(Partner).order_by(Partner.created_at.desc())
             if status:
                 stmt = stmt.where(Partner.status == status)
@@ -38,7 +35,8 @@ class PartnerService(BaseService):
 
     async def list_keys(self, partner_id: str) -> list[PartnerKey]:
         """All keys (any status) for the admin console."""
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             res = await session.execute(
                 select(PartnerKey)
                 .where(PartnerKey.partner_id == partner_id)
@@ -50,7 +48,8 @@ class PartnerService(BaseService):
         # Lazy import avoids a module-load cycle (audit_service imports this module).
         from .audit_service import AuditService
 
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             res = await session.execute(
                 select(Partner).where(Partner.partner_id == partner_id)
             )
@@ -90,7 +89,8 @@ class PartnerService(BaseService):
         or a partner with no currently-valid active keys all return None, and the
         caller maps that to a uniform "not available" response.
         """
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             res = await session.execute(
                 select(Partner).where(Partner.partner_id == partner_id)
             )
