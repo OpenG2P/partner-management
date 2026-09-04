@@ -13,7 +13,7 @@ on:
     inputs:
       fastapi_common_ref:
         description: "openg2p-fastapi-common git ref (tag/branch)"
-        default: "1.2"
+        default: "1.2.1"
         type: string
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         env:
-          REF: ${{ inputs.fastapi_common_ref || '1.2' }}
+          REF: ${{ inputs.fastapi_common_ref || '1.2.1' }}
         run: |
           python -m pip install --upgrade pip
           pip install \
