@@ -34,7 +34,7 @@ jobs:
       changelog_skip_ai: ${{ inputs.changelog_skip_ai || false }}
       changelog_regenerate: ${{ inputs.changelog_regenerate || '' }}
       # `pins` are per-image: the two API Dockerfiles declare ARG
-      # FASTAPI_COMMON_REF, and `develop` is a BRANCH -- without resolving it to a
+      # FASTAPI_COMMON_REF, and `1.2` is a BRANCH -- without resolving it to a
       # SHA, two builds of the same commit produce different images. The UI
       # Dockerfile has no git-ref ARG, so it needs no pins.
       images: |
@@ -45,7 +45,7 @@ jobs:
            "pins": [
              {"arg": "FASTAPI_COMMON_REF",
               "repo": "https://github.com/openg2p/openg2p-fastapi-common",
-              "ref": "develop"}
+              "ref": "1.2"}
            ]},
 
           {"name": "partner-api",
@@ -54,7 +54,7 @@ jobs:
            "pins": [
              {"arg": "FASTAPI_COMMON_REF",
               "repo": "https://github.com/openg2p/openg2p-fastapi-common",
-              "ref": "develop"}
+              "ref": "1.2"}
            ]},
 
           {"name": "staff-portal-ui",
