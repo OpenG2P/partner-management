@@ -1,10 +1,9 @@
 import logging
 from datetime import datetime
 
-from openg2p_fastapi_common.context import dbengine
+from openg2p_fastapi_common.context import get_async_session_maker
 from openg2p_fastapi_common.service import BaseService
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from ..config import Settings
 from ..errors import (
@@ -30,10 +29,6 @@ from .partner_service import PartnerService
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
-
-
-def _sm():
-    return async_sessionmaker(dbengine.get(), expire_on_commit=False)
 
 
 def _parse_dt(value):
@@ -90,7 +85,8 @@ class RequestService(BaseService):
             raise InvalidKeyError("At least one public key is required to onboard a partner.")
 
         actor_name = (actor or {}).get("name")
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             partner = Partner(
                 partner_id=data.partner_id,
                 name=data.name,
@@ -149,7 +145,8 @@ class RequestService(BaseService):
         if not proposed and not data.revoke_kids:
             raise InvalidKeyError("Provide at least one key to add or one kid to revoke.")
 
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             req = PartnerRequest(
                 request_type=RequestType.key_update.value,
                 partner_id=data.partner_id,
@@ -182,14 +179,16 @@ class RequestService(BaseService):
     # --- reads ---------------------------------------------------------------
 
     async def get_request(self, request_id: str) -> PartnerRequest:
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             req = await session.get(PartnerRequest, request_id)
             if not req:
                 raise RequestNotFoundError(request_id)
             return req
 
     async def list_requests(self, status: str = None, partner_id: str = None) -> list[PartnerRequest]:
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             stmt = select(PartnerRequest).order_by(PartnerRequest.created_at.desc())
             if status:
                 stmt = stmt.where(PartnerRequest.status == status)
@@ -202,7 +201,8 @@ class RequestService(BaseService):
 
     async def approve(self, request_id: str, actor: dict = None, notes: str = None) -> PartnerRequest:
         actor_name = (actor or {}).get("name")
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             req = await session.get(PartnerRequest, request_id)
             if not req:
                 raise RequestNotFoundError(request_id)
@@ -280,7 +280,8 @@ class RequestService(BaseService):
             return req
 
     async def reject(self, request_id: str, actor: dict = None, notes: str = None) -> PartnerRequest:
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             req = await session.get(PartnerRequest, request_id)
             if not req:
                 raise RequestNotFoundError(request_id)
