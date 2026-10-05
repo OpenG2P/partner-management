@@ -6,6 +6,7 @@ from openg2p_fastapi_common.controller import BaseController
 
 from ..auth import AuthCredentials, PartnerManagerAuth
 from ..config import Settings
+from ..models import RequestStatus, RequestType
 from ..schemas import (
     KeyUpdateRequestCreate,
     OnboardingRequestCreate,
@@ -85,10 +86,15 @@ class AdminRequestController(BaseController):
     async def list_requests(
         self,
         auth: Annotated[AuthCredentials, Depends(_admin_auth)],
-        status: Optional[str] = None,
+        status: Optional[RequestStatus] = None,
         partner_id: Optional[str] = None,
+        request_type: Optional[RequestType] = None,
     ) -> PartnerRequestListResponse:
-        rows = await self.requests.list_requests(status=status, partner_id=partner_id)
+        rows = await self.requests.list_requests(
+            status=status.value if status else None,
+            partner_id=partner_id,
+            request_type=request_type.value if request_type else None,
+        )
         return PartnerRequestListResponse(
             count=len(rows),
             requests=[PartnerRequestResponse.model_validate(r) for r in rows],

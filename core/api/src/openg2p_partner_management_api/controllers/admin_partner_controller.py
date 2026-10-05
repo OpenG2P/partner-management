@@ -7,16 +7,25 @@ from openg2p_fastapi_common.controller import BaseController
 from ..auth import AuthCredentials, PartnerManagerAuth
 from ..config import Settings
 from ..errors import PartnerNotFoundError
-from ..models import PartnerStatus
+from ..models import (
+    IDENTIFIER_HINT,
+    IDENTIFIER_PATTERN,
+    KeyStatus,
+    PartnerStatus,
+    RequestStatus,
+    RequestType,
+    SigningAlgorithm,
+)
 from ..schemas import (
     AuditEventListResponse,
     AuditEventResponse,
     KeyResponse,
+    MetadataResponse,
     PartnerActionResponse,
     PartnerListResponse,
     PartnerResponse,
 )
-from ..services import AuditService, PartnerService
+from ..services import AuditService, KeyService, PartnerService
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -31,8 +40,15 @@ class AdminPartnerController(BaseController):
         super().__init__(**kwargs)
         self.partners = PartnerService.get_component()
         self.audit = AuditService.get_component()
+        self.keys = KeyService.get_component()
         self.router.tags += ["Admin: Partners"]
 
+        self.router.add_api_route(
+            "/metadata",
+            self.get_metadata,
+            methods=["GET"],
+            responses={200: {"model": MetadataResponse}},
+        )
         self.router.add_api_route(
             "/partners",
             self.list_partners,
@@ -70,12 +86,27 @@ class AdminPartnerController(BaseController):
             responses={200: {"model": PartnerActionResponse}},
         )
 
+    async def get_metadata(
+        self,
+        auth: Annotated[AuthCredentials, Depends(_admin_auth)],
+    ) -> MetadataResponse:
+        allowed = self.keys.allowed_algorithms
+        return MetadataResponse(
+            algorithms=[a.value for a in SigningAlgorithm if a.value in allowed],
+            partner_statuses=[s.value for s in PartnerStatus],
+            key_statuses=[s.value for s in KeyStatus],
+            request_types=[t.value for t in RequestType],
+            request_statuses=[s.value for s in RequestStatus],
+            identifier_pattern=IDENTIFIER_PATTERN,
+            identifier_hint=IDENTIFIER_HINT,
+        )
+
     async def list_partners(
         self,
         auth: Annotated[AuthCredentials, Depends(_admin_auth)],
-        status: Optional[str] = None,
+        status: Optional[PartnerStatus] = None,
     ) -> PartnerListResponse:
-        rows = await self.partners.list_partners(status=status)
+        rows = await self.partners.list_partners(status=status.value if status else None)
         return PartnerListResponse(
             count=len(rows),
             partners=[PartnerResponse.model_validate(p) for p in rows],

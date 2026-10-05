@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { labelOf } from "@/lib/metadata";
 import { PartnerRequest } from "@/lib/types";
 import {
   PageHeader,
@@ -62,7 +63,7 @@ export default function RequestDetailPage() {
     <div>
       <BackLink href="/requests" label="Requests" />
       <PageHeader
-        title={`${req.request_type === "onboarding" ? "Onboarding" : "Key update"} — ${req.partner_id}`}
+        title={`${labelOf(req.request_type)} — ${req.partner_id}`}
         subtitle={`Filed ${fmtDate(req.created_at)}`}
         action={<StatusPill status={req.status} />}
       />

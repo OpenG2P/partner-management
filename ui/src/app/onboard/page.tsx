@@ -1,12 +1,14 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { PartnerRequest } from "@/lib/types";
+import { matchesIdentifier, useMetadata } from "@/lib/metadata";
+import { Partner, PartnerKey, PartnerRequest } from "@/lib/types";
 import { PageHeader, ErrorBanner } from "@/components/ui";
 
-const ALGS = ["auto", "RS256", "ES256", "EdDSA"];
+// "auto" = omit algorithm and let the API infer it from the key.
+const AUTO = "auto";
 
 interface KeyRow {
   public_key: string;
@@ -14,13 +16,14 @@ interface KeyRow {
   algorithm: string;
 }
 
-const emptyKey = (): KeyRow => ({ public_key: "", kid: "", algorithm: "auto" });
+const emptyKey = (): KeyRow => ({ public_key: "", kid: "", algorithm: AUTO });
 
 function OnboardForm() {
   const router = useRouter();
   const params = useSearchParams();
   const mode = params.get("mode") === "key-update" ? "key-update" : "onboarding";
   const presetPartner = params.get("partner_id") || "";
+  const meta = useMetadata();
 
   const [partnerId, setPartnerId] = useState(presetPartner);
   const [name, setName] = useState("");
@@ -28,12 +31,44 @@ function OnboardForm() {
   const [description, setDescription] = useState("");
   const [jwksUrl, setJwksUrl] = useState("");
   const [importJwks, setImportJwks] = useState(false);
-  const [revokeKids, setRevokeKids] = useState("");
+  const [revokeKids, setRevokeKids] = useState<string[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [loadedKeys, setLoadedKeys] = useState<{ partnerId: string; keys: PartnerKey[] }>({
+    partnerId: "",
+    keys: [],
+  });
   const [keys, setKeys] = useState<KeyRow[]>([emptyKey()]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const isUpdate = mode === "key-update";
+
+  // Key update: partner_id must be an existing partner -> offer a select.
+  useEffect(() => {
+    if (!isUpdate || presetPartner) return;
+    api
+      .get<{ partners: Partner[] }>("/partners")
+      .then((d) => setPartners(d.partners))
+      .catch((e) => setError(e.message));
+  }, [isUpdate, presetPartner]);
+
+  // Key update: only the partner's current (non-revoked) keys can be revoked.
+  useEffect(() => {
+    if (!isUpdate || !partnerId) return;
+    api
+      .get<PartnerKey[]>(`/partners/${encodeURIComponent(partnerId)}/keys`)
+      .then((ks) => setLoadedKeys({ partnerId, keys: ks.filter((k) => k.status !== "revoked") }))
+      .catch((e) => setError(e.message));
+  }, [isUpdate, partnerId]);
+  const revocable = loadedKeys.partnerId === partnerId ? loadedKeys.keys : [];
+
+  const partnerIdInvalid =
+    !isUpdate && partnerId !== "" && !matchesIdentifier(meta, partnerId);
+  const invalidKid = keys.some((k) => k.kid.trim() && !matchesIdentifier(meta, k.kid.trim()));
+
+  function toggleRevoke(kid: string, on: boolean) {
+    setRevokeKids((cur) => (on ? [...cur, kid] : cur.filter((x) => x !== kid)));
+  }
 
   function setKey(i: number, patch: Partial<KeyRow>) {
     setKeys((ks) => ks.map((k, idx) => (idx === i ? { ...k, ...patch } : k)));
@@ -48,7 +83,7 @@ function OnboardForm() {
         .map((k) => ({
           public_key: k.public_key.trim(),
           ...(k.kid.trim() ? { kid: k.kid.trim() } : {}),
-          ...(k.algorithm !== "auto" ? { algorithm: k.algorithm } : {}),
+          ...(k.algorithm !== AUTO ? { algorithm: k.algorithm } : {}),
         }));
 
       let req: PartnerRequest;
@@ -59,10 +94,7 @@ function OnboardForm() {
           jwks_url: jwksUrl || null,
           import_from_jwks_url: importJwks,
           keys: cleanKeys,
-          revoke_kids: revokeKids
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
+          revoke_kids: revokeKids,
         });
       } else {
         req = await api.post<PartnerRequest>("/partners/requests/onboarding", {
@@ -98,13 +130,45 @@ function OnboardForm() {
       <div className="card space-y-4">
         <div>
           <label className="field-label">Partner ID *</label>
-          <input
-            className="field-input"
-            value={partnerId}
-            disabled={isUpdate && !!presetPartner}
-            onChange={(e) => setPartnerId(e.target.value)}
-            placeholder="e.g. PARTNER_G2P_BRIDGE"
-          />
+          {isUpdate && !presetPartner ? (
+            <select
+              className="field-input"
+              value={partnerId}
+              onChange={(e) => {
+                setPartnerId(e.target.value);
+                setRevokeKids([]);
+              }}
+            >
+              <option value="">Select a partner…</option>
+              {partners.map((p) => (
+                <option key={p.id} value={p.partner_id}>
+                  {p.partner_id} — {p.name} ({p.status})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <>
+              <input
+                className="field-input"
+                value={partnerId}
+                disabled={isUpdate}
+                onChange={(e) => setPartnerId(e.target.value)}
+                placeholder="e.g. PARTNER_G2P_BRIDGE"
+                aria-invalid={partnerIdInvalid}
+              />
+              {!isUpdate && (
+                <p
+                  className={`text-xs mt-1 ${
+                    partnerIdInvalid
+                      ? "text-[color:var(--color-danger)]"
+                      : "text-[color:var(--color-text-muted)]"
+                  }`}
+                >
+                  Stable ID callers use to fetch keys. {meta.identifier_hint}
+                </p>
+              )}
+            </>
+          )}
         </div>
 
         {!isUpdate && (
@@ -161,7 +225,13 @@ function OnboardForm() {
                     value={k.kid}
                     onChange={(e) => setKey(i, { kid: e.target.value })}
                     placeholder="defaults to fingerprint"
+                    aria-invalid={!!k.kid.trim() && !matchesIdentifier(meta, k.kid.trim())}
                   />
+                  {k.kid.trim() && !matchesIdentifier(meta, k.kid.trim()) && (
+                    <p className="text-xs mt-1 text-[color:var(--color-danger)]">
+                      {meta.identifier_hint}
+                    </p>
+                  )}
                 </div>
                 <div className="w-40">
                   <label className="field-label">Algorithm</label>
@@ -170,7 +240,8 @@ function OnboardForm() {
                     value={k.algorithm}
                     onChange={(e) => setKey(i, { algorithm: e.target.value })}
                   >
-                    {ALGS.map((a) => (
+                    <option value={AUTO}>Auto-detect</option>
+                    {meta.algorithms.map((a) => (
                       <option key={a} value={a}>
                         {a}
                       </option>
@@ -203,14 +274,19 @@ function OnboardForm() {
           <label className="field-label">JWKS URL (optional)</label>
           <input
             className="field-input"
+            type="url"
             value={jwksUrl}
-            onChange={(e) => setJwksUrl(e.target.value)}
+            onChange={(e) => {
+              setJwksUrl(e.target.value);
+              if (!e.target.value.trim()) setImportJwks(false);
+            }}
             placeholder="https://partner.example.org/.well-known/jwks.json"
           />
           <label className="flex items-center gap-2 mt-2 text-sm">
             <input
               type="checkbox"
               checked={importJwks}
+              disabled={!jwksUrl.trim()}
               onChange={(e) => setImportJwks(e.target.checked)}
             />
             Import keys from this JWKS URL now (fetched once and stored)
@@ -219,18 +295,42 @@ function OnboardForm() {
 
         {isUpdate && (
           <div>
-            <label className="field-label">Revoke key IDs (comma-separated, optional)</label>
-            <input
-              className="field-input"
-              value={revokeKids}
-              onChange={(e) => setRevokeKids(e.target.value)}
-              placeholder="old-key-1, old-key-2"
-            />
+            <label className="field-label">Revoke existing keys (optional)</label>
+            {!partnerId ? (
+              <p className="text-sm text-[color:var(--color-text-muted)]">
+                Select a partner to see its keys.
+              </p>
+            ) : revocable.length === 0 ? (
+              <p className="text-sm text-[color:var(--color-text-muted)]">
+                This partner has no current keys to revoke.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {revocable.map((k) => (
+                  <label key={k.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={revokeKids.includes(k.kid)}
+                      onChange={(e) => toggleRevoke(k.kid, e.target.checked)}
+                    />
+                    <span className="font-medium">{k.kid}</span>
+                    <span className="text-[color:var(--color-text-muted)]">
+                      {k.algorithm} · {k.status}
+                      {k.key_fingerprint ? ` · ${k.key_fingerprint.slice(0, 16)}…` : ""}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         <div className="flex gap-3 pt-2">
-          <button className="btn-primary" disabled={busy} onClick={submit}>
+          <button
+            className="btn-primary"
+            disabled={busy || !partnerId || partnerIdInvalid || invalidKid}
+            onClick={submit}
+          >
             {busy ? "Submitting…" : "Submit request"}
           </button>
           <button className="btn-secondary" onClick={() => router.back()}>

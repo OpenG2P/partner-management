@@ -5,6 +5,7 @@ from .key import (
     PublicKeyListResponse,
     PublicKeyResponse,
 )
+from .metadata import MetadataResponse
 from .partner import (
     PartnerActionResponse,
     PartnerListResponse,
@@ -26,6 +27,7 @@ __all__ = [
     "KeyResponse",
     "PublicKeyResponse",
     "PublicKeyListResponse",
+    "MetadataResponse",
     "PartnerResponse",
     "PartnerListResponse",
     "PartnerActionResponse",

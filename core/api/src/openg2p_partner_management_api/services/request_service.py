@@ -62,7 +62,10 @@ class RequestService(BaseService):
         normalized: list[dict] = []
         for k in key_inputs:
             nk = self.keys.normalize(
-                public_key=k.public_key, jwk=k.jwk, kid=k.kid, algorithm=k.algorithm
+                public_key=k.public_key,
+                jwk=k.jwk,
+                kid=k.kid,
+                algorithm=k.algorithm.value if k.algorithm else None,
             )
             normalized.append(nk.as_dict(k.not_before, k.not_after))
 
@@ -143,6 +146,20 @@ class RequestService(BaseService):
         if not partner:
             raise PartnerNotFoundError(data.partner_id)
 
+        # Only the partner's current (non-revoked) kids can be revoked — the same
+        # set the UI offers as a multi-select.
+        revocable = {
+            k.kid
+            for k in await self.partners.list_keys(data.partner_id)
+            if k.status != KeyStatus.revoked.value
+        }
+        unknown = sorted(set(data.revoke_kids or []) - revocable)
+        if unknown:
+            raise InvalidKeyError(
+                f"Cannot revoke {unknown}: not a current key of partner "
+                f"'{data.partner_id}'. Revocable: {sorted(revocable)}."
+            )
+
         proposed = await self._collect_and_normalize(
             data.keys, data.jwks_url, data.import_from_jwks_url
         )
@@ -188,11 +205,15 @@ class RequestService(BaseService):
                 raise RequestNotFoundError(request_id)
             return req
 
-    async def list_requests(self, status: str = None, partner_id: str = None) -> list[PartnerRequest]:
+    async def list_requests(
+        self, status: str = None, partner_id: str = None, request_type: str = None
+    ) -> list[PartnerRequest]:
         async with _sm()() as session:
             stmt = select(PartnerRequest).order_by(PartnerRequest.created_at.desc())
             if status:
                 stmt = stmt.where(PartnerRequest.status == status)
+            if request_type:
+                stmt = stmt.where(PartnerRequest.request_type == request_type)
             if partner_id:
                 stmt = stmt.where(PartnerRequest.partner_id == partner_id)
             res = await session.execute(stmt)

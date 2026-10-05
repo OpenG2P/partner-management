@@ -26,6 +26,24 @@ class KeyStatus(str, Enum):
     revoked = "revoked"
 
 
+class SigningAlgorithm(str, Enum):
+    # The JWS algorithms PM can infer from a key and render as a JWK. This is the
+    # closed set accepted on input (KeyInput.algorithm) and the ceiling for the
+    # crypto_allowed_algorithms config. Single source of truth for the UI select
+    # (served by GET /metadata). Stored rows keep a plain String column, so a row
+    # with any other value still loads.
+    RS256 = "RS256"
+    ES256 = "ES256"
+    EdDSA = "EdDSA"
+
+
+# Partner / key identifiers travel as URL path segments (/keys/{partner_id}/{kid}),
+# so whitespace and URL delimiters are not allowed. Enforced on input only; the
+# UI shows the same rule as a hint (served by GET /metadata).
+IDENTIFIER_PATTERN = r"^[^\s/?#%]+$"
+IDENTIFIER_HINT = "No spaces or '/', '?', '#', '%' (e.g. PARTNER_G2P_BRIDGE)."
+
+
 class Partner(BaseModelWithId):
     """A third party whose signatures other OpenG2P modules need to verify."""
 

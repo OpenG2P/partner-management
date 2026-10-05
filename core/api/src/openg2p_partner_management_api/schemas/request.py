@@ -1,15 +1,26 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .key import KeyInput
+from ..models import IDENTIFIER_PATTERN
+from .key import KeyInput, blank_to_none
+
+
+def _check_jwks_url(value):
+    value = blank_to_none(value)
+    if value is None:
+        return None
+    value = value.strip()
+    if not value.lower().startswith(("https://", "http://")):
+        raise ValueError("jwks_url must be an http(s) URL.")
+    return value
 
 
 class OnboardingRequestCreate(BaseModel):
     """Onboard a new partner and its initial public key(s)."""
 
-    partner_id: str = Field(..., min_length=1, max_length=255)
+    partner_id: str = Field(..., min_length=1, max_length=255, pattern=IDENTIFIER_PATTERN)
     name: str = Field(..., min_length=1, max_length=255)
     org_name: Optional[str] = Field(default=None, max_length=255)
     description: Optional[str] = Field(
@@ -20,6 +31,8 @@ class OnboardingRequestCreate(BaseModel):
     keys: List[KeyInput] = Field(default_factory=list)
     # When true and jwks_url is set, keys are fetched from it and stored.
     import_from_jwks_url: bool = False
+
+    _jwks_url = field_validator("jwks_url", mode="before")(_check_jwks_url)
 
 
 class KeyUpdateRequestCreate(BaseModel):
@@ -32,8 +45,11 @@ class KeyUpdateRequestCreate(BaseModel):
     keys: List[KeyInput] = Field(default_factory=list)
     jwks_url: Optional[str] = Field(default=None, max_length=1024)
     import_from_jwks_url: bool = False
-    # kids of existing keys to revoke when this request is approved.
+    # kids of existing keys to revoke when this request is approved. Each must
+    # be a current (non-revoked) key of the partner — checked in RequestService.
     revoke_kids: List[str] = Field(default_factory=list)
+
+    _jwks_url = field_validator("jwks_url", mode="before")(_check_jwks_url)
 
 
 class RequestReview(BaseModel):
