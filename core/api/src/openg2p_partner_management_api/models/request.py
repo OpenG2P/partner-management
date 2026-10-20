@@ -14,6 +14,7 @@ _JSONList = JSON().with_variant(JSONB(), "postgresql")
 class RequestType(str, Enum):
     onboarding = "onboarding"
     key_update = "key_update"  # key rotation / addition / revocation
+    policy = "policy"  # new policy versions / policy revocation
 
 
 class RequestStatus(str, Enum):
@@ -23,7 +24,7 @@ class RequestStatus(str, Enum):
 
 
 class PartnerRequest(BaseModelWithId):
-    """An admin-facing workflow record for onboarding or key rotation.
+    """An admin-facing workflow record for onboarding, key rotation or policy changes.
 
     The submitted key material is normalised (to canonical PEM) and validated at
     creation time and stashed in ``proposed_keys`` so approval is a cheap apply.
@@ -47,6 +48,12 @@ class PartnerRequest(BaseModelWithId):
     proposed_keys: Mapped[list] = mapped_column(_JSONList, default=list)
     # kids to revoke on approval (key rotation retirement).
     revoke_kids: Mapped[list] = mapped_column(_JSONList, default=list)
+    # Policies proposed (PolicyInput dicts), also stored as pending
+    # pm_partner_policies versions carrying this request's id.
+    proposed_policies: Mapped[list] = mapped_column(_JSONList, default=list)
+    # Data controllers whose active policy is revoked on approval (null = the
+    # use-case policy).
+    revoke_data_controllers: Mapped[list] = mapped_column(_JSONList, default=list)
 
     status: Mapped[str] = mapped_column(
         String(20), default=RequestStatus.created.value, index=True

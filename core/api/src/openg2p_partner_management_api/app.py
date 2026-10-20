@@ -13,9 +13,16 @@ from .controllers import (
     AdminPartnerController,
     AdminRequestController,
     KeyFetchController,
+    PolicyFetchController,
 )
 from .migrations import migrate_all
-from .services import AuditService, KeyService, PartnerService, RequestService
+from .services import (
+    AuditService,
+    KeyService,
+    PartnerService,
+    PolicyService,
+    RequestService,
+)
 
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
@@ -32,10 +39,12 @@ class Initializer(BaseInitializer):
         KeyService()
         PartnerService()
         AuditService()
+        PolicyService()
         RequestService()
         AdminRequestController().post_init()
         AdminPartnerController().post_init()
         KeyFetchController().post_init()
+        PolicyFetchController().post_init()
         # Central Audit Manager trail (config-gated, non-blocking).
         self.return_app().add_middleware(
             AuditMiddleware,

@@ -239,6 +239,8 @@ staffPortalApi:
     PARTNER_MANAGER_AUDIT_SOURCE: /openg2p/partner-management-staff-portal-api
     PARTNER_MANAGER_AUDIT_MODULE: partner-management-staff-portal-api
     PARTNER_MANAGER_AUDIT_ANONYMOUS_FAILURES: '{{ .Values.global.auditAnonymousFailures }}'
+    # Cache-Control max-age (seconds) on policy reads (GET /policies...).
+    PARTNER_MANAGER_POLICY_FETCH_CACHE_MAX_AGE: "60"
 
   envVarsFrom:
     PARTNER_MANAGER_DB_PASSWORD:
@@ -311,7 +313,7 @@ partnerApi:
     periodSeconds: 20
 
   envVars:
-    PARTNER_MANAGER_OPENAPI_TITLE: OpenG2P Partner Management Key Fetch API
+    PARTNER_MANAGER_OPENAPI_TITLE: OpenG2P Partner Management Key and Policy Fetch API
     PARTNER_MANAGER_HOST: 0.0.0.0
     PARTNER_MANAGER_PORT: '{{ .Values.containerPort }}'
     PARTNER_MANAGER_DB_HOSTNAME: '{{ .Values.global.postgresqlHost }}'
@@ -319,8 +321,11 @@ partnerApi:
     PARTNER_MANAGER_DB_DBNAME: '{{ tpl .Values.global.pmDB $ }}'
     PARTNER_MANAGER_DB_USERNAME: '{{ tpl .Values.global.pmDBUser $ }}'
     PARTNER_MANAGER_CRYPTO_ALLOWED_ALGORITHMS: '["RS256","ES256","EdDSA"]'
-    # Public key-fetch: no caller auth.
+    # Public key- and policy-fetch: no caller auth.
     PARTNER_MANAGER_AUTH_ENABLED: "false"
+    # Cache-Control max-age (seconds) on GET /policies... responses (callers'
+    # policy cache TTL: how fast a narrowed/revoked policy takes effect).
+    PARTNER_MANAGER_POLICY_FETCH_CACHE_MAX_AGE: "60"
 
   envVarsFrom:
     PARTNER_MANAGER_DB_PASSWORD:

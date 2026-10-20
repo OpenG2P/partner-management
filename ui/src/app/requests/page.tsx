@@ -33,7 +33,7 @@ export default function RequestsPage() {
     <div>
       <PageHeader
         title="Requests"
-        subtitle="Onboarding and key-rotation requests awaiting review"
+        subtitle="Onboarding, key-rotation and policy requests awaiting review"
         action={
           <Link href="/onboard" className="btn-primary">
             + Onboard partner
@@ -79,7 +79,7 @@ export default function RequestsPage() {
               <tr>
                 <th>Partner ID</th>
                 <th>Type</th>
-                <th>Keys</th>
+                <th>Changes</th>
                 <th>Status</th>
                 <th>Submitted by</th>
                 <th>Created</th>
@@ -91,10 +91,7 @@ export default function RequestsPage() {
                 <tr key={r.id}>
                   <td className="font-medium">{r.partner_id}</td>
                   <td>{labelOf(r.request_type)}</td>
-                  <td>
-                    +{r.proposed_keys?.length || 0}
-                    {r.revoke_kids?.length ? ` / −${r.revoke_kids.length}` : ""}
-                  </td>
+                  <td>{changesOf(r)}</td>
                   <td>
                     <StatusPill status={r.status} />
                   </td>
@@ -116,4 +113,20 @@ export default function RequestsPage() {
       )}
     </div>
   );
+}
+
+// e.g. "+1 key / −1 key · +2 policies".
+function changesOf(r: PartnerRequest): string {
+  const part = (added: number, removed: number, one: string, many: string) =>
+    [added ? `+${added} ${added === 1 ? one : many}` : "", removed ? `−${removed} ${removed === 1 ? one : many}` : ""]
+      .filter(Boolean)
+      .join(" / ");
+  const keys = part(r.proposed_keys?.length || 0, r.revoke_kids?.length || 0, "key", "keys");
+  const policies = part(
+    r.proposed_policies?.length || 0,
+    r.revoke_data_controllers?.length || 0,
+    "policy",
+    "policies"
+  );
+  return [keys, policies].filter(Boolean).join(" · ") || "—";
 }

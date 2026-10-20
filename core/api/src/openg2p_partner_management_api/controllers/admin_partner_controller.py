@@ -10,8 +10,10 @@ from ..errors import PartnerNotFoundError
 from ..models import (
     IDENTIFIER_HINT,
     IDENTIFIER_PATTERN,
+    FetchType,
     KeyStatus,
     PartnerStatus,
+    PolicyStatus,
     RequestStatus,
     RequestType,
     SigningAlgorithm,
@@ -24,8 +26,10 @@ from ..schemas import (
     PartnerActionResponse,
     PartnerListResponse,
     PartnerResponse,
+    PolicyResponse,
 )
-from ..services import AuditService, KeyService, PartnerService
+from ..schemas.policy import allowed_signing_algorithms
+from ..services import AuditService, KeyService, PartnerService, PolicyService
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -41,6 +45,7 @@ class AdminPartnerController(BaseController):
         self.partners = PartnerService.get_component()
         self.audit = AuditService.get_component()
         self.keys = KeyService.get_component()
+        self.policies = PolicyService.get_component()
         self.router.tags += ["Admin: Partners"]
 
         self.router.add_api_route(
@@ -66,6 +71,12 @@ class AdminPartnerController(BaseController):
             self.list_partner_keys,
             methods=["GET"],
             responses={200: {"model": list[KeyResponse]}},
+        )
+        self.router.add_api_route(
+            "/partners/{partner_id}/policies",
+            self.list_partner_policies,
+            methods=["GET"],
+            responses={200: {"model": list[PolicyResponse]}},
         )
         self.router.add_api_route(
             "/partners/{partner_id}/audit",
@@ -97,6 +108,9 @@ class AdminPartnerController(BaseController):
             key_statuses=[s.value for s in KeyStatus],
             request_types=[t.value for t in RequestType],
             request_statuses=[s.value for s in RequestStatus],
+            signing_algorithms=allowed_signing_algorithms(),
+            fetch_types=[f.value for f in FetchType],
+            policy_statuses=[s.value for s in PolicyStatus],
             identifier_pattern=IDENTIFIER_PATTERN,
             identifier_hint=IDENTIFIER_HINT,
         )
@@ -129,6 +143,15 @@ class AdminPartnerController(BaseController):
     ) -> list[KeyResponse]:
         rows = await self.partners.list_keys(partner_id)
         return [KeyResponse.model_validate(k) for k in rows]
+
+    async def list_partner_policies(
+        self,
+        partner_id: str,
+        auth: Annotated[AuthCredentials, Depends(_admin_auth)],
+        all_versions: bool = False,
+    ) -> list[PolicyResponse]:
+        rows = await self.policies.list_for_partner(partner_id, all_versions=all_versions)
+        return [PolicyResponse.model_validate(p) for p in rows]
 
     async def partner_audit(
         self,

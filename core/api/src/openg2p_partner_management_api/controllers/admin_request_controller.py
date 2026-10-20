@@ -12,6 +12,7 @@ from ..schemas import (
     OnboardingRequestCreate,
     PartnerRequestListResponse,
     PartnerRequestResponse,
+    PolicyRequestCreate,
     RequestReview,
 )
 from ..services import RequestService
@@ -23,7 +24,7 @@ _admin_auth = PartnerManagerAuth()
 
 
 class AdminRequestController(BaseController):
-    """Staff-realm APIs to file and decide onboarding / key-rotation requests."""
+    """Staff-realm APIs to file and decide onboarding / key-rotation / policy requests."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -39,6 +40,12 @@ class AdminRequestController(BaseController):
         self.router.add_api_route(
             "/partners/requests/key-update",
             self.create_key_update,
+            methods=["POST"],
+            responses={200: {"model": PartnerRequestResponse}},
+        )
+        self.router.add_api_route(
+            "/partners/requests/policy",
+            self.create_policy,
             methods=["POST"],
             responses={200: {"model": PartnerRequestResponse}},
         )
@@ -81,6 +88,14 @@ class AdminRequestController(BaseController):
         auth: Annotated[AuthCredentials, Depends(_admin_auth)],
     ) -> PartnerRequestResponse:
         req = await self.requests.create_key_update(data, actor=PartnerManagerAuth.actor_info(auth))
+        return PartnerRequestResponse.model_validate(req)
+
+    async def create_policy(
+        self,
+        data: PolicyRequestCreate,
+        auth: Annotated[AuthCredentials, Depends(_admin_auth)],
+    ) -> PartnerRequestResponse:
+        req = await self.requests.create_policy(data, actor=PartnerManagerAuth.actor_info(auth))
         return PartnerRequestResponse.model_validate(req)
 
     async def list_requests(

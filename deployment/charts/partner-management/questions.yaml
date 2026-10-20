@@ -14,7 +14,7 @@ questions:
   label: Staff Portal API Hostname
   group: General
 - variable: global.partnerApiHostname
-  description: Hostname for the partner-api (unauthenticated key-fetch used by other modules)
+  description: Hostname for the partner-api (unauthenticated key- and policy-fetch used by other modules)
   type: string
   label: Partner API (Key Fetch) Hostname
   group: General
@@ -27,7 +27,7 @@ questions:
   label: Staff Portal API
   group: General
 - variable: partnerApi.enabled
-  description: Install the partner-api (public key-fetch service)
+  description: Install the partner-api (public key- and policy-fetch service)
   type: boolean
   default: true
   label: Partner API

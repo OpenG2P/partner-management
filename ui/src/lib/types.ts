@@ -1,6 +1,6 @@
 export interface PartnerRequest {
   id: string;
-  request_type: "onboarding" | "key_update";
+  request_type: "onboarding" | "key_update" | "policy";
   partner_id: string;
   name?: string | null;
   org_name?: string | null;
@@ -8,6 +8,9 @@ export interface PartnerRequest {
   jwks_url?: string | null;
   proposed_keys: ProposedKey[];
   revoke_kids: string[];
+  proposed_policies: PolicyInput[];
+  // null = the use-case policy.
+  revoke_data_controllers: (string | null)[];
   status: "created" | "approved" | "rejected";
   submitted_by?: string | null;
   reviewed_by?: string | null;
@@ -63,4 +66,31 @@ export interface PartnerKey {
   not_before?: string | null;
   not_after?: string | null;
   created_at: string;
+}
+
+// What a partner may access. data_controller set = a scope policy for that
+// registry (allowed_data_scopes); null = a use-case policy (allowed_use_cases).
+export interface PolicyInput {
+  data_controller: string | null;
+  allowed_data_scopes: string[];
+  allowed_use_cases: string[];
+  allowed_purposes: string[];
+  allowed_subject_id_types: string[];
+  allowed_signing_algs: string[];
+  max_validity_duration: string | null;
+  fetch_type: string;
+  max_fetch_frequency: string | null;
+  data_life: string | null;
+}
+
+export interface PartnerPolicy extends PolicyInput {
+  id: string;
+  partner_id: string;
+  version: number;
+  status: "pending" | "active" | "superseded" | "rejected" | "revoked";
+  request_id: string;
+  created_by?: string | null;
+  approved_by?: string | null;
+  created_at: string;
+  effective_from?: string | null;
 }

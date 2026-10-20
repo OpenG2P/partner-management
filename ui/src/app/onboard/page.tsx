@@ -6,6 +6,13 @@ import { api } from "@/lib/api";
 import { matchesIdentifier, useMetadata } from "@/lib/metadata";
 import { Partner, PartnerKey, PartnerRequest } from "@/lib/types";
 import { PageHeader, ErrorBanner } from "@/components/ui";
+import {
+  PolicyEditor,
+  PolicyRow,
+  emptyPolicy,
+  policyRowProblem,
+  toPolicyInput,
+} from "@/components/policy";
 
 // "auto" = omit algorithm and let the API infer it from the key.
 const AUTO = "auto";
@@ -38,6 +45,8 @@ function OnboardForm() {
     keys: [],
   });
   const [keys, setKeys] = useState<KeyRow[]>([emptyKey()]);
+  // Onboarding only: optional access policies, activated with the partner.
+  const [policies, setPolicies] = useState<PolicyRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -65,9 +74,14 @@ function OnboardForm() {
   const partnerIdInvalid =
     !isUpdate && partnerId !== "" && !matchesIdentifier(meta, partnerId);
   const invalidKid = keys.some((k) => k.kid.trim() && !matchesIdentifier(meta, k.kid.trim()));
+  const invalidPolicy = !isUpdate && policies.some((p) => policyRowProblem(p) !== null);
 
   function toggleRevoke(kid: string, on: boolean) {
     setRevokeKids((cur) => (on ? [...cur, kid] : cur.filter((x) => x !== kid)));
+  }
+
+  function setPolicy(i: number, patch: Partial<PolicyRow>) {
+    setPolicies((ps) => ps.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
   }
 
   function setKey(i: number, patch: Partial<KeyRow>) {
@@ -105,6 +119,7 @@ function OnboardForm() {
           jwks_url: jwksUrl || null,
           import_from_jwks_url: importJwks,
           keys: cleanKeys,
+          policies: policies.map(toPolicyInput),
         });
       }
       router.push(`/requests/${req.id}`);
@@ -325,10 +340,39 @@ function OnboardForm() {
           </div>
         )}
 
+        {!isUpdate && (
+          <div className="border-t border-[color:var(--color-border)] pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="field-label mb-0">Policies (optional)</label>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setPolicies((ps) => [...ps, emptyPolicy()])}
+              >
+                + Add policy
+              </button>
+            </div>
+            <p className="text-xs mb-2 text-[color:var(--color-text-muted)]">
+              What this partner may ask for: per registry (data controller and scopes), or
+              use cases of an exchange. Activated when the onboarding is approved; change later
+              with a policy request.
+            </p>
+            {policies.map((p, i) => (
+              <PolicyEditor
+                key={i}
+                row={p}
+                meta={meta}
+                onChange={(patch) => setPolicy(i, patch)}
+                onRemove={() => setPolicies((ps) => ps.filter((_, idx) => idx !== i))}
+              />
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-3 pt-2">
           <button
             className="btn-primary"
-            disabled={busy || !partnerId || partnerIdInvalid || invalidKid}
+            disabled={busy || !partnerId || partnerIdInvalid || invalidKid || invalidPolicy}
             onClick={submit}
           >
             {busy ? "Submitting…" : "Submit request"}

@@ -13,6 +13,10 @@ export interface Metadata {
   key_statuses: string[];
   request_types: string[];
   request_statuses: string[];
+  // Algorithms a policy may allow; policy fetch types and version statuses.
+  signing_algorithms: string[];
+  fetch_types: string[];
+  policy_statuses: string[];
   identifier_pattern: string;
   identifier_hint: string;
 }
@@ -21,8 +25,11 @@ export const FALLBACK_METADATA: Metadata = {
   algorithms: ["RS256", "ES256", "EdDSA"],
   partner_statuses: ["created", "active", "disabled"],
   key_statuses: ["pending", "active", "revoked"],
-  request_types: ["onboarding", "key_update"],
+  request_types: ["onboarding", "key_update", "policy"],
   request_statuses: ["created", "approved", "rejected"],
+  signing_algorithms: ["RS256", "ES256", "EdDSA"],
+  fetch_types: ["oneshot", "periodic"],
+  policy_statuses: ["pending", "active", "superseded", "rejected", "revoked"],
   identifier_pattern: "^[^\\s/?#%]+$",
   identifier_hint: "No spaces or '/', '?', '#', '%' (e.g. PARTNER_G2P_BRIDGE).",
 };
@@ -30,6 +37,9 @@ export const FALLBACK_METADATA: Metadata = {
 const LABELS: Record<string, string> = {
   onboarding: "Onboarding",
   key_update: "Key update",
+  policy: "Policy",
+  oneshot: "One-shot",
+  periodic: "Periodic",
 };
 
 export function labelOf(value: string): string {

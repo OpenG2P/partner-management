@@ -9,6 +9,7 @@ from .partner import (
     PartnerStatus,
     SigningAlgorithm,
 )
+from .policy import FetchType, PartnerPolicy, PolicyStatus
 from .request import PartnerRequest, RequestStatus, RequestType
 
 __all__ = [
@@ -20,6 +21,9 @@ __all__ = [
     "SigningAlgorithm",
     "IDENTIFIER_PATTERN",
     "IDENTIFIER_HINT",
+    "PartnerPolicy",
+    "PolicyStatus",
+    "FetchType",
     "PartnerRequest",
     "RequestStatus",
     "RequestType",

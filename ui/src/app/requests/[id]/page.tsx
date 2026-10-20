@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { labelOf } from "@/lib/metadata";
 import { PartnerRequest } from "@/lib/types";
+import { PolicySummary, controllerLabel } from "@/components/policy";
 import {
   PageHeader,
   StatusPill,
@@ -83,31 +84,60 @@ export default function RequestDetailPage() {
           {req.review_notes && <Detail label="Review notes" value={req.review_notes} />}
         </div>
 
-        <div className="card">
-          <h2 className="text-lg mb-3">Proposed keys</h2>
-          {req.proposed_keys?.length ? (
+        {req.request_type !== "policy" && (
+          <div className="card">
+            <h2 className="text-lg mb-3">Proposed keys</h2>
+            {req.proposed_keys?.length ? (
+              <ul className="space-y-3">
+                {req.proposed_keys.map((k) => (
+                  <li key={k.kid} className="border border-[color:var(--color-border)] rounded-md p-3">
+                    <div className="font-medium">{k.kid}</div>
+                    <div className="text-sm text-[color:var(--color-text-muted)]">
+                      {k.algorithm}
+                      {k.key_fingerprint ? ` · ${k.key_fingerprint.slice(0, 16)}…` : ""}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[color:var(--color-text-muted)]">No new keys.</p>
+            )}
+            {req.revoke_kids?.length > 0 && (
+              <div className="mt-3 text-sm">
+                <span className="text-[color:var(--color-text-muted)]">Revoking: </span>
+                {req.revoke_kids.join(", ")}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {(req.proposed_policies?.length > 0 || req.revoke_data_controllers?.length > 0) && (
+        <div className="card mb-4">
+          <h2 className="text-lg mb-3">Proposed policies</h2>
+          {req.proposed_policies?.length ? (
             <ul className="space-y-3">
-              {req.proposed_keys.map((k) => (
-                <li key={k.kid} className="border border-[color:var(--color-border)] rounded-md p-3">
-                  <div className="font-medium">{k.kid}</div>
-                  <div className="text-sm text-[color:var(--color-text-muted)]">
-                    {k.algorithm}
-                    {k.key_fingerprint ? ` · ${k.key_fingerprint.slice(0, 16)}…` : ""}
-                  </div>
+              {req.proposed_policies.map((p) => (
+                <li
+                  key={p.data_controller ?? ""}
+                  className="border border-[color:var(--color-border)] rounded-md p-3"
+                >
+                  <div className="font-medium mb-1">{controllerLabel(p.data_controller)}</div>
+                  <PolicySummary policy={p} />
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-[color:var(--color-text-muted)]">No new keys.</p>
+            <p className="text-[color:var(--color-text-muted)]">No new policy versions.</p>
           )}
-          {req.revoke_kids?.length > 0 && (
+          {req.revoke_data_controllers?.length > 0 && (
             <div className="mt-3 text-sm">
-              <span className="text-[color:var(--color-text-muted)]">Revoking: </span>
-              {req.revoke_kids.join(", ")}
+              <span className="text-[color:var(--color-text-muted)]">Revoking policies: </span>
+              {req.revoke_data_controllers.map(controllerLabel).join(", ")}
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {open ? (
         <div className="card">

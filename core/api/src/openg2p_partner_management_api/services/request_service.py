@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from ..config import Settings
 from ..errors import (
     InvalidKeyError,
+    InvalidPolicyError,
     PartnerExistsError,
     PartnerNotFoundError,
     RequestNotFoundError,
@@ -27,6 +28,7 @@ from ..models import (
 from .audit_service import AuditService
 from .key_service import KeyService
 from .partner_service import PartnerService
+from .policy_service import PolicyService
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -45,7 +47,7 @@ def _parse_dt(value):
 
 
 class RequestService(BaseService):
-    """Creates onboarding / key-update requests and applies them on approval.
+    """Creates onboarding / key-update / policy requests and applies them on approval.
 
     Key material is normalised and validated up front (at request creation), so
     approval is a cheap, deterministic apply. In v1 the admin both files and
@@ -55,6 +57,7 @@ class RequestService(BaseService):
     keys = KeyService.get_cached_component()
     partners = PartnerService.get_cached_component()
     audit = AuditService.get_cached_component()
+    policies = PolicyService.get_cached_component()
 
     # --- creation ------------------------------------------------------------
 
@@ -112,11 +115,17 @@ class RequestService(BaseService):
                 jwks_url=data.jwks_url,
                 proposed_keys=proposed,
                 revoke_kids=[],
+                proposed_policies=[p.model_dump() for p in data.policies],
+                revoke_data_controllers=[],
                 status=RequestStatus.created.value,
                 submitted_by=actor_name,
             )
             session.add(partner)
             session.add(req)
+            # Pending version 1 of each policy, activated with the partner.
+            await self.policies.add_pending(
+                session, data.partner_id, data.policies, req.id, actor=actor
+            )
             self.audit.record(
                 session,
                 action=AuditAction.partner_created,
@@ -135,7 +144,11 @@ class RequestService(BaseService):
                 partner_id=data.partner_id,
                 request_id=req.id,
                 actor=actor,
-                details={"type": RequestType.onboarding.value, "keys": len(proposed)},
+                details={
+                    "type": RequestType.onboarding.value,
+                    "keys": len(proposed),
+                    "policies": [p.data_controller for p in data.policies],
+                },
             )
             await session.commit()
             await session.refresh(req)
@@ -190,6 +203,57 @@ class RequestService(BaseService):
                     "type": RequestType.key_update.value,
                     "keys_proposed": [k["kid"] for k in proposed],
                     "revoke_kids": list(data.revoke_kids or []),
+                },
+            )
+            await session.commit()
+            await session.refresh(req)
+            return req
+
+    async def create_policy(self, data, actor: dict = None) -> PartnerRequest:
+        partner = await self.partners.get_partner(data.partner_id)
+        if not partner:
+            raise PartnerNotFoundError(data.partner_id)
+        # Only approved partners: onboarding policies cover a 'created' partner.
+        if partner.status == PartnerStatus.created.value:
+            raise InvalidPolicyError(
+                f"Partner '{data.partner_id}' is not approved yet; approve its onboarding "
+                "request (which carries its initial policies) before changing its policies."
+            )
+        if partner.status == PartnerStatus.disabled.value:
+            raise InvalidPolicyError(
+                f"Partner '{data.partner_id}' is disabled; enable it before changing its policies."
+            )
+
+        revoke = list(data.revoke_data_controllers or [])
+        async with _sm()() as session:
+            await self.policies.check_proposal(session, data.partner_id, data.policies, revoke)
+            req = PartnerRequest(
+                request_type=RequestType.policy.value,
+                partner_id=data.partner_id,
+                description=data.description,
+                proposed_keys=[],
+                revoke_kids=[],
+                proposed_policies=[p.model_dump() for p in data.policies],
+                revoke_data_controllers=revoke,
+                status=RequestStatus.created.value,
+                submitted_by=(actor or {}).get("name"),
+            )
+            session.add(req)
+            await self.policies.add_pending(
+                session, data.partner_id, data.policies, req.id, actor=actor
+            )
+            self.audit.record(
+                session,
+                action=AuditAction.request_submitted,
+                entity_type="partner_request",
+                entity_id=req.id,
+                partner_id=data.partner_id,
+                request_id=req.id,
+                actor=actor,
+                details={
+                    "type": RequestType.policy.value,
+                    "policies": [p.data_controller for p in data.policies],
+                    "revoke_data_controllers": revoke,
                 },
             )
             await session.commit()
@@ -283,6 +347,8 @@ class RequestService(BaseService):
                         details={"kid": kid},
                     )
 
+            policy_changes = await self.policies.apply_approval(session, req, actor=actor)
+
             req.status = RequestStatus.approved.value
             req.reviewed_by = actor_name
             req.review_notes = notes
@@ -294,7 +360,7 @@ class RequestService(BaseService):
                 partner_id=req.partner_id,
                 request_id=req.id,
                 actor=actor,
-                details={"kids_added": added, "kids_revoked": revoked},
+                details={"kids_added": added, "kids_revoked": revoked, **policy_changes},
             )
             await session.commit()
             await session.refresh(req)
@@ -310,7 +376,9 @@ class RequestService(BaseService):
                     f"Request is '{req.status}', only 'created' requests can be rejected."
                 )
             # A rejected onboarding leaves the partner in 'created' (never served);
-            # the admin can disable or resubmit. No keys were materialised.
+            # the admin can disable or resubmit. No keys were materialised; its
+            # pending policy versions become 'rejected'.
+            await self.policies.apply_rejection(session, req, actor=actor)
             req.status = RequestStatus.rejected.value
             req.reviewed_by = (actor or {}).get("name")
             req.review_notes = notes

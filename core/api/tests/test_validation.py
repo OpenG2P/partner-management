@@ -38,8 +38,11 @@ def test_metadata_lists_allowed_values(client):
     assert body["algorithms"] == ["RS256", "ES256", "EdDSA"]
     assert body["partner_statuses"] == ["created", "active", "disabled"]
     assert body["key_statuses"] == ["pending", "active", "revoked"]
-    assert body["request_types"] == ["onboarding", "key_update"]
+    assert body["request_types"] == ["onboarding", "key_update", "policy"]
     assert body["request_statuses"] == ["created", "approved", "rejected"]
+    assert body["signing_algorithms"] == ["RS256", "ES256", "EdDSA"]
+    assert body["fetch_types"] == ["oneshot", "periodic"]
+    assert body["policy_statuses"] == ["pending", "active", "superseded", "rejected", "revoked"]
     assert body["identifier_pattern"] and body["identifier_hint"]
 
 

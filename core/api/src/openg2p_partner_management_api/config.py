@@ -20,7 +20,8 @@ class Settings(BaseSettings):
 
     openapi_title: str = "OpenG2P Partner Management API"
     openapi_description: str = """
-    Central registry of OpenG2P partners and their public keys.
+    Central registry of OpenG2P partners, their public keys and their access
+    policies (what each partner may ask for).
 
     All OpenG2P modules (g2p-bridge, consent-manager, ...) fetch partner
     public keys from this service instead of maintaining their own partner
@@ -48,6 +49,9 @@ class Settings(BaseSettings):
     # Cache-Control max-age (seconds) returned on key-fetch responses so callers
     # (e.g. the commons PartnerKeyStore) cache within a bounded rotation window.
     key_fetch_cache_max_age: int = 300
+    # Cache-Control max-age (seconds) on policy-fetch responses. Shorter than keys:
+    # a narrowed or revoked policy should reach callers (CM, Composite) quickly.
+    policy_fetch_cache_max_age: int = 60
 
     # --- Admin auth (Keycloak staff realm) -----------------------------------
     # A caller must present a staff-realm JWT carrying this role (realm role or a
