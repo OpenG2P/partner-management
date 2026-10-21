@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useCatalogue } from "@/lib/catalogue";
 import { useMetadata } from "@/lib/metadata";
-import { PartnerPolicy, PartnerRequest } from "@/lib/types";
+import { PartnerKey, PartnerPolicy, PartnerRequest } from "@/lib/types";
 import { PageHeader, BackLink, ErrorBanner } from "@/components/ui";
 import {
   PolicyEditor,
@@ -32,8 +33,11 @@ export default function ChangePolicyPage() {
   const partnerId = decodeURIComponent(params.partnerId);
   const router = useRouter();
   const meta = useMetadata();
+  const catalogue = useCatalogue();
 
   const [active, setActive] = useState<PartnerPolicy[]>([]);
+  // Algorithms of the partner's active keys (pre-fill new policies' algorithms).
+  const [keyAlgs, setKeyAlgs] = useState<string[] | undefined>(undefined);
   const [rows, setRows] = useState<EditRow[]>([]);
   const [revoke, setRevoke] = useState<string[]>([]);
   const [description, setDescription] = useState("");
@@ -45,6 +49,14 @@ export default function ChangePolicyPage() {
       .get<PartnerPolicy[]>(`/partners/${encodeURIComponent(partnerId)}/policies`)
       .then(setActive)
       .catch((e) => setError(e.message));
+    api
+      .get<PartnerKey[]>(`/partners/${encodeURIComponent(partnerId)}/keys`)
+      .then((ks) =>
+        setKeyAlgs(
+          Array.from(new Set(ks.filter((k) => k.status === "active").map((k) => k.algorithm))).sort(),
+        ),
+      )
+      .catch(() => setKeyAlgs(undefined)); // only a pre-fill: the form works without it
   }, [partnerId]);
 
   const editing = new Set(
@@ -164,7 +176,9 @@ export default function ChangePolicyPage() {
               key={i}
               row={r.row}
               meta={meta}
+              catalogue={catalogue}
               lockKey={r.existing !== undefined}
+              keyAlgs={keyAlgs}
               onChange={(patch) => setRow(i, patch)}
               onRemove={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}
             />

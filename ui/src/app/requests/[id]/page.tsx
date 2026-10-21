@@ -71,6 +71,17 @@ export default function RequestDetailPage() {
 
       <ErrorBanner message={error} />
 
+      {req.warnings?.length > 0 && (
+        <div className="card mb-4 border-[color:var(--color-brand-orange)]">
+          <h2 className="text-lg mb-2">Not checked at submission</h2>
+          <ul className="list-disc pl-5 text-sm space-y-1">
+            {req.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="card">
           <h2 className="text-lg mb-3">Partner</h2>

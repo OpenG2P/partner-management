@@ -54,6 +54,9 @@ class PartnerRequest(BaseModelWithId):
     # Data controllers whose active policy is revoked on approval (null = the
     # use-case policy).
     revoke_data_controllers: Mapped[list] = mapped_column(_JSONList, default=list)
+    # Checks that could not run at submission (e.g. a catalogue source was
+    # unreachable), for the approver to verify by hand.
+    warnings: Mapped[list] = mapped_column(_JSONList, default=list, nullable=True)
 
     status: Mapped[str] = mapped_column(
         String(20), default=RequestStatus.created.value, index=True

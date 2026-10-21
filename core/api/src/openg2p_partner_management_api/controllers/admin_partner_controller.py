@@ -21,6 +21,7 @@ from ..models import (
 from ..schemas import (
     AuditEventListResponse,
     AuditEventResponse,
+    CatalogueResponse,
     KeyResponse,
     MetadataResponse,
     PartnerActionResponse,
@@ -29,7 +30,13 @@ from ..schemas import (
     PolicyResponse,
 )
 from ..schemas.policy import allowed_signing_algorithms
-from ..services import AuditService, KeyService, PartnerService, PolicyService
+from ..services import (
+    AuditService,
+    CatalogueService,
+    KeyService,
+    PartnerService,
+    PolicyService,
+)
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -46,6 +53,7 @@ class AdminPartnerController(BaseController):
         self.audit = AuditService.get_component()
         self.keys = KeyService.get_component()
         self.policies = PolicyService.get_component()
+        self.catalogue = CatalogueService.get_component()
         self.router.tags += ["Admin: Partners"]
 
         self.router.add_api_route(
@@ -53,6 +61,12 @@ class AdminPartnerController(BaseController):
             self.get_metadata,
             methods=["GET"],
             responses={200: {"model": MetadataResponse}},
+        )
+        self.router.add_api_route(
+            "/catalogue",
+            self.get_catalogue,
+            methods=["GET"],
+            responses={200: {"model": CatalogueResponse}},
         )
         self.router.add_api_route(
             "/partners",
@@ -114,6 +128,19 @@ class AdminPartnerController(BaseController):
             identifier_pattern=IDENTIFIER_PATTERN,
             identifier_hint=IDENTIFIER_HINT,
         )
+
+    async def get_catalogue(
+        self,
+        auth: Annotated[AuthCredentials, Depends(_admin_auth)],
+    ) -> CatalogueResponse:
+        """Choices for policy forms, from the configured catalogue sources.
+
+        One entry per source: a registry's data scopes (``data_controller`` set)
+        or an exchange's use cases. A source that cannot be read has ``error``
+        set and no items (the form falls back to free text). Empty ``sources`` =
+        none configured.
+        """
+        return CatalogueResponse(sources=await self.catalogue.catalogue())
 
     async def list_partners(
         self,

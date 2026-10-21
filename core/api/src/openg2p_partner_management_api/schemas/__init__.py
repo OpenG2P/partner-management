@@ -1,4 +1,5 @@
 from .audit import AuditEventListResponse, AuditEventResponse
+from .catalogue import CatalogueItem, CatalogueResponse, CatalogueSourceOut
 from .key import (
     KeyInput,
     KeyResponse,
@@ -31,6 +32,9 @@ from .request import (
 __all__ = [
     "AuditEventResponse",
     "AuditEventListResponse",
+    "CatalogueItem",
+    "CatalogueResponse",
+    "CatalogueSourceOut",
     "KeyInput",
     "KeyResponse",
     "PublicKeyResponse",

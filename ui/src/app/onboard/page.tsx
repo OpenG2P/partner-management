@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useCatalogue } from "@/lib/catalogue";
+import { keyAlgorithm } from "@/lib/keyAlgorithm";
 import { matchesIdentifier, useMetadata } from "@/lib/metadata";
 import { Partner, PartnerKey, PartnerRequest } from "@/lib/types";
 import { PageHeader, ErrorBanner } from "@/components/ui";
@@ -31,6 +33,7 @@ function OnboardForm() {
   const mode = params.get("mode") === "key-update" ? "key-update" : "onboarding";
   const presetPartner = params.get("partner_id") || "";
   const meta = useMetadata();
+  const catalogue = useCatalogue();
 
   const [partnerId, setPartnerId] = useState(presetPartner);
   const [name, setName] = useState("");
@@ -74,6 +77,16 @@ function OnboardForm() {
   const partnerIdInvalid =
     !isUpdate && partnerId !== "" && !matchesIdentifier(meta, partnerId);
   const invalidKid = keys.some((k) => k.kid.trim() && !matchesIdentifier(meta, k.kid.trim()));
+  // Algorithms of the keys proposed here (chosen, or detected from the key), to
+  // pre-fill policies' signing algorithms. undefined while any key is unknown.
+  const proposedAlgs = keys
+    .filter((k) => k.public_key.trim())
+    .map((k) => (k.algorithm !== AUTO ? k.algorithm : keyAlgorithm(k.public_key)));
+  const keyAlgs =
+    proposedAlgs.length && proposedAlgs.every((a) => a)
+      ? Array.from(new Set(proposedAlgs as string[])).sort()
+      : undefined;
+
   const invalidPolicy = !isUpdate && policies.some((p) => policyRowProblem(p) !== null);
 
   function toggleRevoke(kid: string, on: boolean) {
@@ -362,6 +375,8 @@ function OnboardForm() {
                 key={i}
                 row={p}
                 meta={meta}
+                catalogue={catalogue}
+                keyAlgs={keyAlgs}
                 onChange={(patch) => setPolicy(i, patch)}
                 onRemove={() => setPolicies((ps) => ps.filter((_, idx) => idx !== i))}
               />

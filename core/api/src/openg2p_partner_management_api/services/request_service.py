@@ -26,6 +26,7 @@ from ..models import (
     RequestType,
 )
 from .audit_service import AuditService
+from .catalogue_service import CatalogueService
 from .key_service import KeyService
 from .partner_service import PartnerService
 from .policy_service import PolicyService
@@ -58,6 +59,7 @@ class RequestService(BaseService):
     partners = PartnerService.get_cached_component()
     audit = AuditService.get_cached_component()
     policies = PolicyService.get_cached_component()
+    catalogue = CatalogueService.get_cached_component()
 
     # --- creation ------------------------------------------------------------
 
@@ -85,6 +87,33 @@ class RequestService(BaseService):
             deduped[n["key_fingerprint"]] = n
         return list(deduped.values())
 
+    async def _check_catalogue(self, policies) -> list[str]:
+        """Policies against the configured catalogue sources (rejects unknown names)."""
+        if self.catalogue is None:  # not initialised (e.g. a partial app)
+            return []
+        return await self.catalogue.check_policies(policies)
+
+    @staticmethod
+    def _signing_alg_warnings(policies, key_algs: set, whose: str) -> list[str]:
+        """Warn when a policy allows an algorithm none of the partner's keys uses.
+
+        Only for algorithms the request names (not the default); never blocks: a
+        key of that type may be added later.
+        """
+        warnings = []
+        for p in policies:
+            if "allowed_signing_algs" not in p.model_fields_set:
+                continue
+            unmatched = [a for a in p.allowed_signing_algs if a not in key_algs]
+            if unmatched:
+                target = f"'{p.data_controller}'" if p.data_controller else "use cases"
+                warnings.append(
+                    f"Policy for {target}: signing algorithms {unmatched} match none of "
+                    f"{whose} ({', '.join(sorted(key_algs)) or 'none'}); the partner cannot "
+                    "sign with them until it has such a key."
+                )
+        return warnings
+
     async def create_onboarding(self, data, actor: dict = None) -> PartnerRequest:
         if await self.partners.get_partner(data.partner_id):
             raise PartnerExistsError(data.partner_id)
@@ -94,6 +123,10 @@ class RequestService(BaseService):
         )
         if not proposed:
             raise InvalidKeyError("At least one public key is required to onboard a partner.")
+        warnings = await self._check_catalogue(data.policies)
+        warnings += self._signing_alg_warnings(
+            data.policies, {k["algorithm"] for k in proposed}, "the proposed keys' algorithms"
+        )
 
         actor_name = (actor or {}).get("name")
         async with _sm()() as session:
@@ -117,6 +150,7 @@ class RequestService(BaseService):
                 revoke_kids=[],
                 proposed_policies=[p.model_dump() for p in data.policies],
                 revoke_data_controllers=[],
+                warnings=warnings,
                 status=RequestStatus.created.value,
                 submitted_by=actor_name,
             )
@@ -148,6 +182,7 @@ class RequestService(BaseService):
                     "type": RequestType.onboarding.value,
                     "keys": len(proposed),
                     "policies": [p.data_controller for p in data.policies],
+                    **({"warnings": warnings} if warnings else {}),
                 },
             )
             await session.commit()
@@ -225,6 +260,15 @@ class RequestService(BaseService):
             )
 
         revoke = list(data.revoke_data_controllers or [])
+        warnings = await self._check_catalogue(data.policies)
+        active_algs = {
+            k.algorithm
+            for k in await self.partners.list_keys(data.partner_id)
+            if k.status == KeyStatus.active.value
+        }
+        warnings += self._signing_alg_warnings(
+            data.policies, active_algs, "the partner's active keys' algorithms"
+        )
         async with _sm()() as session:
             await self.policies.check_proposal(session, data.partner_id, data.policies, revoke)
             req = PartnerRequest(
@@ -235,6 +279,7 @@ class RequestService(BaseService):
                 revoke_kids=[],
                 proposed_policies=[p.model_dump() for p in data.policies],
                 revoke_data_controllers=revoke,
+                warnings=warnings,
                 status=RequestStatus.created.value,
                 submitted_by=(actor or {}).get("name"),
             )
@@ -254,6 +299,7 @@ class RequestService(BaseService):
                     "type": RequestType.policy.value,
                     "policies": [p.data_controller for p in data.policies],
                     "revoke_data_controllers": revoke,
+                    **({"warnings": warnings} if warnings else {}),
                 },
             )
             await session.commit()

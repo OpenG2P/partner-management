@@ -11,6 +11,8 @@ export interface PartnerRequest {
   proposed_policies: PolicyInput[];
   // null = the use-case policy.
   revoke_data_controllers: (string | null)[];
+  // Checks that could not run at submission (a catalogue source was unreachable).
+  warnings: string[];
   status: "created" | "approved" | "rejected";
   submitted_by?: string | null;
   reviewed_by?: string | null;

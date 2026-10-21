@@ -114,12 +114,21 @@ class PartnerRequestResponse(BaseModel):
     revoke_kids: list = Field(default_factory=list)
     proposed_policies: list = Field(default_factory=list)
     revoke_data_controllers: list = Field(default_factory=list)
+    # Checks that could not run at submission (an unreachable catalogue source):
+    # the approver should verify these by hand.
+    warnings: list[str] = Field(default_factory=list)
     status: str  # created | approved | rejected
     submitted_by: Optional[str] = None
     reviewed_by: Optional[str] = None
     review_notes: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+    @field_validator("warnings", mode="before")
+    @classmethod
+    def _null_warnings(cls, value):
+        return value or []
 
 
 class PartnerRequestListResponse(BaseModel):

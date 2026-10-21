@@ -34,3 +34,16 @@ helpers serves staff-portal-api, partner-api and staff-portal-ui.
 {{- $envVars := merge (deepCopy .Values.envVars) (deepCopy .Values.envVarsFrom) -}}
 {{- include "pm.baseEnvVars" (dict "envVars" $envVars "context" $) }}
 {{- end -}}
+
+{{/*
+staffPortalApi.catalogueSources as compact JSON: a list, or a YAML/JSON string
+(Rancher's multiline form field); empty = []. A ' is written as \u0027 (the env
+value is single-quoted).
+*/}}
+{{- define "pm.catalogueSourcesJson" -}}
+{{- $v := .Values.catalogueSources | default list -}}
+{{- if kindIs "string" $v -}}
+{{- $v = fromYamlArray $v -}}
+{{- end -}}
+{{- $v | toJson | replace "'" "\\u0027" -}}
+{{- end -}}

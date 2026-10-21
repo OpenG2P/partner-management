@@ -18,6 +18,7 @@ from .controllers import (
 from .migrations import migrate_all
 from .services import (
     AuditService,
+    CatalogueService,
     KeyService,
     PartnerService,
     PolicyService,
@@ -39,6 +40,7 @@ class Initializer(BaseInitializer):
         KeyService()
         PartnerService()
         AuditService()
+        CatalogueService()
         PolicyService()
         RequestService()
         AdminRequestController().post_init()

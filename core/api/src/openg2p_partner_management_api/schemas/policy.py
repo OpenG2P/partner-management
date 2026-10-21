@@ -75,8 +75,10 @@ class PolicyInput(BaseModel):
       registry — ``allowed_data_scopes`` required, ``allowed_use_cases`` empty.
     - ``data_controller`` null / "": a use-case policy (an exchange) —
       ``allowed_use_cases`` (``name@major``) required, ``allowed_data_scopes`` empty.
-    - purposes / subject id types: open sets; empty = any.
-    - ``allowed_signing_algs``: at least one of ``GET /metadata`` → ``signing_algorithms``.
+    - purposes / subject id types: empty = any; codes of the country's Master
+      Data lists (CONSENT_PURPOSE, SUBJECT_ID_TYPE) when configured, else free.
+    - ``allowed_signing_algs``: at least one of ``GET /metadata`` → ``signing_algorithms``;
+      one that matches none of the partner's keys is accepted with a warning.
     - durations: ISO-8601 (``P30D``, ``P1Y``, ``PT12H``), > 0, or null.
     Lists are trimmed, blanks and duplicates dropped.
     """

@@ -219,6 +219,42 @@ staffPortalApi:
       port: http
     periodSeconds: 20
 
+  # Catalogue sources: where policy forms get their choices (a registry's data
+  # scopes, an exchange's use cases), and what policy requests are checked
+  # against. Empty = free-text scopes / use cases, no checks. Each entry:
+  #   kind: scopes | use_cases
+  #   url: unsigned GET (scopes: <registry partner API>/partner/data_scopes, which
+  #        needs the registry's unsigned catalogue read on; use_cases: the
+  #        Composite's /composite/v1/use-cases)
+  #   data_controller: the policy's data controller (scopes only, required)
+  #   label: shown in the staff UI
+  # May also be a YAML/JSON string (as Rancher's form passes it). Example:
+  # catalogueSources:
+  #   - kind: scopes
+  #     data_controller: farmer_registry
+  #     url: http://farmer-registry-partner-api/partner/data_scopes
+  #     label: Farmer Registry
+  #   - kind: use_cases
+  #     url: http://agri-composite-api/composite/v1/use-cases
+  #     label: Agri Stack Composite
+  catalogueSources: []
+  # Per-source fetch timeout (s) and how long a fetched catalogue is reused (s).
+  catalogueFetchTimeout: 3
+  catalogueCacheTtl: 300
+
+  # Master Data code lists offered as policy purposes and subject ID types
+  # (POST {url}/catalogue/get_list_values, with a client-credentials token of
+  # global.authClientId — a service account, not the user's token). With a list
+  # loaded, requests naming other values are rejected; MDS down = accepted with
+  # a warning; a list not in the country's pack = free text. url "" or an empty
+  # list code = free text. Helpful only: nothing at run time depends on it.
+  masterData:
+    url: 'http://commons-services-master-data-api'
+    purposeListCode: CONSENT_PURPOSE
+    subjectIdTypeListCode: SUBJECT_ID_TYPE
+    cacheTtl: 300
+    timeout: 5
+
   envVars:
     PARTNER_MANAGER_OPENAPI_TITLE: OpenG2P Partner Management Staff Portal API
     PARTNER_MANAGER_HOST: 0.0.0.0
@@ -241,12 +277,29 @@ staffPortalApi:
     PARTNER_MANAGER_AUDIT_ANONYMOUS_FAILURES: '{{ .Values.global.auditAnonymousFailures }}'
     # Cache-Control max-age (seconds) on policy reads (GET /policies...).
     PARTNER_MANAGER_POLICY_FETCH_CACHE_MAX_AGE: "60"
+    # Catalogue sources (see catalogueSources above), as JSON.
+    PARTNER_MANAGER_CATALOGUE_SOURCES: '{{ include "pm.catalogueSourcesJson" . }}'
+    PARTNER_MANAGER_CATALOGUE_FETCH_TIMEOUT: '{{ .Values.catalogueFetchTimeout }}'
+    PARTNER_MANAGER_CATALOGUE_CACHE_TTL: '{{ .Values.catalogueCacheTtl }}'
+    # Master Data code lists (see masterData above).
+    PARTNER_MANAGER_MDS_URL: '{{ tpl .Values.masterData.url $ }}'
+    PARTNER_MANAGER_MDS_TOKEN_URL: '{{ tpl .Values.global.keycloakIssuerUrl $ }}/protocol/openid-connect/token'
+    PARTNER_MANAGER_MDS_CLIENT_ID: '{{ tpl .Values.global.authClientId $ }}'
+    PARTNER_MANAGER_MDS_PURPOSE_LIST_CODE: '{{ .Values.masterData.purposeListCode }}'
+    PARTNER_MANAGER_MDS_SUBJECT_ID_TYPE_LIST_CODE: '{{ .Values.masterData.subjectIdTypeListCode }}'
+    PARTNER_MANAGER_MDS_CACHE_TTL: '{{ .Values.masterData.cacheTtl }}'
+    PARTNER_MANAGER_MDS_TIMEOUT: '{{ .Values.masterData.timeout }}'
 
   envVarsFrom:
     PARTNER_MANAGER_DB_PASSWORD:
       secretKeyRef:
         name: '{{ tpl .Values.global.pmDBSecret $ }}'
         key: '{{ tpl .Values.global.pmDBUserPasswordKey $ }}'
+    # Client secret for the Master Data token (secret written by keycloak-init).
+    PARTNER_MANAGER_MDS_CLIENT_SECRET:
+      secretKeyRef:
+        name: '{{ tpl .Values.global.authClientSecret $ }}'
+        key: '{{ tpl .Values.global.authClientSecretKey $ }}'
 
   resources: {}
   podLabels: {}
