@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import { CatalogueItem, CatalogueSource } from "@/lib/catalogue";
 import { Metadata, labelOf } from "@/lib/metadata";
-import { PolicyInput } from "@/lib/types";
+import { PolicyInput, PolicyRef } from "@/lib/types";
 
 // Form state for one policy. List fields are comma-separated text; the API
 // trims entries and drops blanks/duplicates.
 export interface PolicyRow {
-  kind: "controller" | "use_cases";
-  data_controller: string;
-  grants: string; // scopes (controller) or use cases (use_cases)
+  kind: "registry" | "use_case";
+  data_controller: string; // registry
+  use_case: string; // use case (name@major)
+  scopes: string; // registry
   purposes: string;
   subject_id_types: string;
   signing_algs: string[];
@@ -24,10 +25,11 @@ export interface PolicyRow {
 
 export const DEFAULT_SIGNING_ALGS = ["EdDSA", "ES256"];
 
-export const emptyPolicy = (kind: PolicyRow["kind"] = "controller"): PolicyRow => ({
+export const emptyPolicy = (kind: PolicyRow["kind"] = "registry"): PolicyRow => ({
   kind,
   data_controller: "",
-  grants: "",
+  use_case: "",
+  scopes: "",
   purposes: "",
   subject_id_types: "",
   signing_algs: [...DEFAULT_SIGNING_ALGS],
@@ -45,11 +47,11 @@ const splitList = (v: string) =>
     .filter(Boolean);
 
 export function policyRowFrom(p: PolicyInput): PolicyRow {
-  const isController = !!p.data_controller;
   return {
-    kind: isController ? "controller" : "use_cases",
+    kind: p.data_controller ? "registry" : "use_case",
     data_controller: p.data_controller || "",
-    grants: (isController ? p.allowed_data_scopes : p.allowed_use_cases).join(", "),
+    use_case: p.use_case || "",
+    scopes: p.allowed_data_scopes.join(", "),
     purposes: p.allowed_purposes.join(", "),
     subject_id_types: p.allowed_subject_id_types.join(", "),
     signing_algs: [...p.allowed_signing_algs],
@@ -62,11 +64,11 @@ export function policyRowFrom(p: PolicyInput): PolicyRow {
 }
 
 export function toPolicyInput(r: PolicyRow): PolicyInput {
-  const isController = r.kind === "controller";
+  const isRegistry = r.kind === "registry";
   return {
-    data_controller: isController ? r.data_controller.trim() : null,
-    allowed_data_scopes: isController ? splitList(r.grants) : [],
-    allowed_use_cases: isController ? [] : splitList(r.grants),
+    data_controller: isRegistry ? r.data_controller.trim() : null,
+    use_case: isRegistry ? null : r.use_case.trim(),
+    allowed_data_scopes: isRegistry ? splitList(r.scopes) : [],
     allowed_purposes: splitList(r.purposes),
     allowed_subject_id_types: splitList(r.subject_id_types),
     allowed_signing_algs: r.signing_algs,
@@ -77,33 +79,37 @@ export function toPolicyInput(r: PolicyRow): PolicyInput {
   };
 }
 
-// The policy's key (null = the use-case policy), for display.
-export function controllerLabel(dataController: string | null) {
-  return dataController || "Use cases (exchange)";
+// The policy's key: {data_controller} or {use_case}.
+export function policyRef(p: PolicyRef): PolicyRef {
+  return p.data_controller ? { data_controller: p.data_controller } : { use_case: p.use_case };
+}
+
+// "Registry: farmer_registry" / "Use case: loan-profile@1".
+export function policyKeyLabel(p: PolicyRef) {
+  return p.data_controller ? `Registry: ${p.data_controller}` : `Use case: ${p.use_case}`;
+}
+
+// A string id for the key (React keys, sets).
+export function policyKeyId(p: PolicyRef) {
+  return p.data_controller ? `dc:${p.data_controller}` : `uc:${p.use_case}`;
 }
 
 // Blocking problems the API would also reject, so the submit button can say why.
 export function policyRowProblem(r: PolicyRow): string | null {
-  if (r.kind === "controller" && !r.data_controller.trim()) return "Data controller is required.";
-  if (!splitList(r.grants).length)
-    return r.kind === "controller"
-      ? "At least one scope is required."
-      : "At least one use case is required.";
+  if (r.kind === "registry") {
+    if (!r.data_controller.trim()) return "Registry (data controller) is required.";
+    if (!splitList(r.scopes).length) return "At least one scope is required.";
+  } else if (!/^[^\s/?#%@]+@\d+$/.test(r.use_case.trim())) {
+    return "Use case is required, as name@major (e.g. loan-profile@1).";
+  }
   if (!r.signing_algs.length) return "At least one signing algorithm is required.";
   return null;
 }
 
 const OTHER = "__other__";
 
-// The catalogue sources a row's grants come from: the data controller's scope
-// sources, or the use-case sources.
-function sourcesFor(row: PolicyRow, catalogue: CatalogueSource[]) {
-  return row.kind === "controller"
-    ? catalogue.filter(
-        (s) => s.kind === "scopes" && s.data_controller === row.data_controller.trim(),
-      )
-    : catalogue.filter((s) => s.kind === "use_cases");
-}
+const uniqueItems = (sources: CatalogueSource[]) =>
+  Array.from(new Map(sources.flatMap((s) => s.items).map((i) => [i.id, i] as const)).values());
 
 // Checkbox list of catalogue items, each with its label and description (and a
 // use case's purpose). Selected IDs the catalogue does not list stay visible so
@@ -222,16 +228,18 @@ export function PolicyEditor({
 }: {
   row: PolicyRow;
   meta: Metadata;
-  // GET /catalogue sources; empty = free-text scopes / use cases.
+  // GET /catalogue sources; empty = free-text registry, scopes and use case.
   catalogue?: CatalogueSource[];
   onChange: (patch: Partial<PolicyRow>) => void;
   onRemove?: () => void;
-  // Changing an existing policy: its data controller cannot change.
+  // Editing an existing policy: its registry / use case cannot change.
   lockKey?: boolean;
   // Algorithms of the partner's active (or proposed) keys; undefined = unknown.
   keyAlgs?: string[];
 }) {
-  const isController = row.kind === "controller";
+  const muted = "text-sm text-[color:var(--color-text-muted)]";
+  const danger = "text-xs mb-1 text-[color:var(--color-danger)]";
+  const isRegistry = row.kind === "registry";
   const problem = policyRowProblem(row);
 
   // Pre-fill signing algorithms from the partner's keys (new rows, until edited).
@@ -241,7 +249,7 @@ export function PolicyEditor({
       onChange({ signing_algs: keyAlgsAllowed });
   });
 
-  // Data controller: a select of the configured scope sources, plus "Other…".
+  // Registry: a select of the configured scope sources, plus "Other…".
   const controllers = Array.from(
     new Map(
       catalogue
@@ -251,72 +259,110 @@ export function PolicyEditor({
   );
   const [otherController, setOtherController] = useState(false);
   const dc = row.data_controller.trim();
-  const isOther =
+  const isOtherController =
     otherController || (dc !== "" && !controllers.some(([id]) => id === dc));
 
-  // Grants: catalogue choices when the row's sources were read; free text when
-  // there is no source or one failed (its error shown).
-  const sources = sourcesFor(row, catalogue);
-  const failed = sources.filter((s) => s.error);
-  const items = Array.from(
-    new Map(sources.flatMap((s) => s.items).map((i) => [i.id, i] as const)).values(),
-  );
-  const pickControllerFirst = isController && controllers.length > 0 && !isOther && dc === "";
-  const freeText = !pickControllerFirst && (sources.length === 0 || failed.length > 0);
-  const selected = splitList(row.grants);
-  const purposes = Array.from(
-    new Set(
-      items.filter((i) => selected.includes(i.id) && i.purpose).map((i) => i.purpose!),
-    ),
-  );
+  // Scopes: catalogue choices when the registry's sources were read; free text
+  // when there is no source or one failed (its error shown).
+  const scopeSources = catalogue.filter((s) => s.kind === "scopes" && s.data_controller === dc);
+  const scopeFailed = scopeSources.filter((s) => s.error);
+  const scopeItems = uniqueItems(scopeSources);
+  const pickControllerFirst = controllers.length > 0 && !isOtherController && dc === "";
+  const scopesFree = !pickControllerFirst && (scopeSources.length === 0 || scopeFailed.length > 0);
+
+  // Use case: a select of the catalogue's use cases, plus "Other…"; free text
+  // when no source is configured or one failed.
+  const ucSources = catalogue.filter((s) => s.kind === "use_cases");
+  const ucFailed = ucSources.filter((s) => s.error);
+  const ucItems = uniqueItems(ucSources);
+  const [otherUseCase, setOtherUseCase] = useState(false);
+  const uc = row.use_case.trim();
+  const ucItem = ucItems.find((i) => i.id === uc);
+  const isOtherUseCase = otherUseCase || (uc !== "" && !ucItem);
+  const ucSelect = ucItems.length > 0 && !lockKey;
+
   return (
     <div className="border border-[color:var(--color-border)] rounded-md p-3 mb-3 space-y-3">
       <div className="flex gap-3">
-        <div className="w-56">
+        <div className="w-48">
           <label className="field-label">Policy for</label>
           <select
             className="field-input"
             value={row.kind}
             disabled={lockKey}
-            onChange={(e) => onChange({ kind: e.target.value as PolicyRow["kind"], grants: "" })}
+            onChange={(e) => onChange({ kind: e.target.value as PolicyRow["kind"] })}
           >
-            <option value="controller">Data controller (registry)</option>
-            <option value="use_cases">Use cases (exchange)</option>
+            <option value="registry">Registry</option>
+            <option value="use_case">Use case</option>
           </select>
         </div>
-        {isController && (
-          <div className="flex-1">
-            <label className="field-label">Data controller *</label>
-            {controllers.length > 0 && !lockKey && (
-              <select
-                className="field-input"
-                value={isOther ? OTHER : dc}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setOtherController(v === OTHER);
-                  onChange({ data_controller: v === OTHER ? "" : v, grants: "" });
-                }}
-              >
-                <option value="">Select a data controller…</option>
-                {controllers.map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {label === id ? id : `${label} (${id})`}
-                  </option>
-                ))}
-                <option value={OTHER}>Other…</option>
-              </select>
-            )}
-            {(controllers.length === 0 || lockKey || isOther) && (
-              <input
-                className={`field-input${controllers.length > 0 && !lockKey ? " mt-2" : ""}`}
-                value={row.data_controller}
-                disabled={lockKey}
-                onChange={(e) => onChange({ data_controller: e.target.value })}
-                placeholder="e.g. farmer_registry"
-              />
-            )}
-          </div>
-        )}
+        <div className="flex-1">
+          {isRegistry ? (
+            <>
+              <label className="field-label">Registry (data controller) *</label>
+              {controllers.length > 0 && !lockKey && (
+                <select
+                  className="field-input"
+                  value={isOtherController ? OTHER : dc}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setOtherController(v === OTHER);
+                    onChange({ data_controller: v === OTHER ? "" : v, scopes: "" });
+                  }}
+                >
+                  <option value="">Select a registry…</option>
+                  {controllers.map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label === id ? id : `${label} (${id})`}
+                    </option>
+                  ))}
+                  <option value={OTHER}>Other…</option>
+                </select>
+              )}
+              {(controllers.length === 0 || lockKey || isOtherController) && (
+                <input
+                  className={`field-input${controllers.length > 0 && !lockKey ? " mt-2" : ""}`}
+                  value={row.data_controller}
+                  disabled={lockKey}
+                  onChange={(e) => onChange({ data_controller: e.target.value })}
+                  placeholder="e.g. farmer_registry"
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <label className="field-label">Use case *</label>
+              {ucSelect && (
+                <select
+                  className="field-input"
+                  value={isOtherUseCase ? OTHER : uc}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setOtherUseCase(v === OTHER);
+                    onChange({ use_case: v === OTHER ? "" : v });
+                  }}
+                >
+                  <option value="">Select a use case…</option>
+                  {ucItems.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.label && i.label !== i.id ? `${i.label} (${i.id})` : i.id}
+                    </option>
+                  ))}
+                  <option value={OTHER}>Other…</option>
+                </select>
+              )}
+              {(!ucSelect || isOtherUseCase) && (
+                <input
+                  className={`field-input${ucSelect ? " mt-2" : ""}`}
+                  value={row.use_case}
+                  disabled={lockKey}
+                  onChange={(e) => onChange({ use_case: e.target.value })}
+                  placeholder="name@major, e.g. loan-profile@1"
+                />
+              )}
+            </>
+          )}
+        </div>
         {onRemove && (
           <button type="button" className="btn-secondary self-end" onClick={onRemove}>
             Remove
@@ -324,61 +370,70 @@ export function PolicyEditor({
         )}
       </div>
 
-      <div>
-        <label className="field-label">
-          {isController ? "Allowed scopes *" : "Allowed use cases *"}
-        </label>
-        {pickControllerFirst && (
-          <p className="text-sm text-[color:var(--color-text-muted)]">
-            Select a data controller to see its scopes.
-          </p>
-        )}
-        {items.length > 0 && (
-          <CatalogueChoices
-            items={items}
-            selected={selected}
-            showUnlisted={!freeText}
-            onChange={(ids) => onChange({ grants: ids.join(", ") })}
-          />
-        )}
-        {sources.length > 0 && !freeText && items.length === 0 && (
-          <p className="text-sm text-[color:var(--color-text-muted)]">
-            {sources.map((s) => s.label).join(", ")} lists none.
-          </p>
-        )}
-        {failed.map((s) => (
-          <p key={s.label} className="text-xs mb-1 text-[color:var(--color-danger)]">
-            {s.label}: {s.error}. Enter IDs by hand; the request will carry a warning.
-          </p>
-        ))}
-        {freeText && (
-          <>
-            <input
-              className={`field-input${items.length ? " mt-2" : ""}`}
-              value={row.grants}
-              onChange={(e) => onChange({ grants: e.target.value })}
-              placeholder={
-                isController ? "e.g. farmer.basic, farmer.land" : "e.g. loan-profile@1"
-              }
+      {isRegistry ? (
+        <div>
+          <label className="field-label">Allowed scopes *</label>
+          {pickControllerFirst && <p className={muted}>Select a registry to see its scopes.</p>}
+          {scopeItems.length > 0 && (
+            <CatalogueChoices
+              items={scopeItems}
+              selected={splitList(row.scopes)}
+              showUnlisted={!scopesFree}
+              onChange={(ids) => onChange({ scopes: ids.join(", ") })}
             />
-            <p className="text-xs mt-1 text-[color:var(--color-text-muted)]">
-              Comma-separated.{" "}
-              {isController
-                ? "Scopes the registry defines."
-                : "Each as name@major (the use case's major version)."}
+          )}
+          {scopeSources.length > 0 && !scopesFree && scopeItems.length === 0 && (
+            <p className={muted}>{scopeSources.map((s) => s.label).join(", ")} lists none.</p>
+          )}
+          {scopeFailed.map((s) => (
+            <p key={s.label} className={danger}>
+              {s.label}: {s.error}. Enter IDs by hand; the request will carry a warning.
             </p>
-          </>
-        )}
-        {!isController && purposes.length > 0 && (
-          <button
-            type="button"
-            className="btn-secondary mt-2"
-            onClick={() => onChange({ purposes: purposes.join(", ") })}
-          >
-            Set purposes from selected use cases
-          </button>
-        )}
-      </div>
+          ))}
+          {scopesFree && (
+            <>
+              <input
+                className={`field-input${scopeItems.length ? " mt-2" : ""}`}
+                value={row.scopes}
+                onChange={(e) => onChange({ scopes: e.target.value })}
+                placeholder="e.g. farmer.basic, farmer.land"
+              />
+              <p className="text-xs mt-1 text-[color:var(--color-text-muted)]">
+                Comma-separated. Scopes the registry defines.
+              </p>
+            </>
+          )}
+        </div>
+      ) : (
+        (ucItem || ucFailed.length > 0 || (isOtherUseCase && uc && ucSources.length > 0)) && (
+          <div className="space-y-1">
+            {ucItem && (
+              <div className={muted}>
+                {ucItem.description && <span className="block">{ucItem.description}</span>}
+                {ucItem.purpose && <span className="block">Purpose: {ucItem.purpose}</span>}
+              </div>
+            )}
+            {ucFailed.map((s) => (
+              <p key={s.label} className={danger}>
+                {s.label}: {s.error}. Enter the use case by hand; the request will carry a
+                warning.
+              </p>
+            ))}
+            {isOtherUseCase && uc && ucSources.length > 0 && ucFailed.length === 0 && (
+              <p className={danger}>Not in the catalogue: the request will be refused.</p>
+            )}
+            {ucItem?.purpose && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => onChange({ purposes: ucItem.purpose! })}
+              >
+                Set purposes from selected use case
+              </button>
+            )}
+          </div>
+        )
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <CodeListField
@@ -477,17 +532,19 @@ export function PolicyEditor({
   );
 }
 
-// Read-only summary of one policy (request detail, partner detail).
+// Read-only summary of one policy (request detail, partner detail). The key
+// (registry / use case) is shown by the caller.
 export function PolicySummary({ policy }: { policy: PolicyInput }) {
   const muted = "text-[color:var(--color-text-muted)]";
   const list = (v: string[]) => (v.length ? v.join(", ") : "any");
-  const grants = policy.data_controller ? policy.allowed_data_scopes : policy.allowed_use_cases;
   return (
     <div className="text-sm space-y-1">
-      <div>
-        <span className={muted}>{policy.data_controller ? "Scopes: " : "Use cases: "}</span>
-        {grants.join(", ") || "—"}
-      </div>
+      {policy.data_controller && (
+        <div>
+          <span className={muted}>Scopes: </span>
+          {policy.allowed_data_scopes.join(", ") || "—"}
+        </div>
+      )}
       <div>
         <span className={muted}>Purposes: </span>
         {list(policy.allowed_purposes)}

@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { AuditEvent, Partner, PartnerKey, PartnerPolicy } from "@/lib/types";
-import { PolicySummary, controllerLabel } from "@/components/policy";
+import { AuditEvent, Partner, PartnerKey, PartnerPolicy, PartnerRequest } from "@/lib/types";
+import { labelOf } from "@/lib/metadata";
+import { policyKeyId, policyKeyLabel, policyRef } from "@/components/policy";
 import {
   PageHeader,
   StatusPill,
@@ -17,18 +18,24 @@ import {
 export default function PartnerDetailPage() {
   const params = useParams<{ partnerId: string }>();
   const partnerId = decodeURIComponent(params.partnerId);
+  const router = useRouter();
   const [partner, setPartner] = useState<Partner | null>(null);
   const [keys, setKeys] = useState<PartnerKey[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   // Every version; the active ones are shown first, the rest under history.
   const [policies, setPolicies] = useState<PartnerPolicy[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  // Open policy requests: a policy with a pending change cannot be edited or revoked.
+  const [openPolicyReqs, setOpenPolicyReqs] = useState<PartnerRequest[]>([]);
+  // The policy whose revocation is being confirmed, and the request's description.
+  const [revoking, setRevoking] = useState<PartnerPolicy | null>(null);
+  const [revokeWhy, setRevokeWhy] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [p, k, pol, a] = await Promise.all([
+      const [p, k, pol, a, reqs] = await Promise.all([
         api.get<Partner>(`/partners/${encodeURIComponent(partnerId)}`),
         api.get<PartnerKey[]>(`/partners/${encodeURIComponent(partnerId)}/keys`),
         api.get<PartnerPolicy[]>(
@@ -37,11 +44,15 @@ export default function PartnerDetailPage() {
         api.get<{ events: AuditEvent[] }>(
           `/partners/${encodeURIComponent(partnerId)}/audit`
         ),
+        api.get<{ requests: PartnerRequest[] }>(
+          `/partners/requests?partner_id=${encodeURIComponent(partnerId)}&status=created`
+        ),
       ]);
       setPartner(p);
       setKeys(k);
       setPolicies(pol);
       setAudit(a.events);
+      setOpenPolicyReqs(reqs.requests);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -64,6 +75,22 @@ export default function PartnerDetailPage() {
     }
   }
 
+  async function revoke(p: PartnerPolicy) {
+    setBusy(true);
+    setError(null);
+    try {
+      const req = await api.post<PartnerRequest>("/partners/requests/policy", {
+        partner_id: partnerId,
+        description: revokeWhy || null,
+        revoke: [policyRef(p)],
+      });
+      router.push(`/requests/${req.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
   if (!partner) {
     return (
       <div>
@@ -74,8 +101,21 @@ export default function PartnerDetailPage() {
     );
   }
 
-  const activePolicies = policies.filter((p) => p.status === "active");
-  const otherPolicies = policies.filter((p) => p.status !== "active");
+  // One row per policy key: its active version, else (a new policy) its pending one.
+  const current = policies.filter(
+    (p) =>
+      p.status === "active" ||
+      (p.status === "pending" &&
+        !policies.some((q) => q.status === "active" && policyKeyId(q) === policyKeyId(p))),
+  );
+  const history = policies.filter((p) => !current.includes(p));
+  // Key → open request changing (pending version) or revoking it.
+  const pendingReq = new Map<string, string>();
+  for (const p of policies)
+    if (p.status === "pending") pendingReq.set(policyKeyId(p), p.request_id);
+  for (const r of openPolicyReqs)
+    for (const ref of r.revoke || []) pendingReq.set(policyKeyId(ref), r.id);
+  const policyBase = `/partners/${encodeURIComponent(partnerId)}/policy`;
 
   return (
     <div>
@@ -160,69 +200,143 @@ export default function PartnerDetailPage() {
       <div className="flex items-center justify-between mt-6 mb-3">
         <h2 className="text-lg">Policies</h2>
         {partner.status === "active" && (
-          <Link
-            href={`/partners/${encodeURIComponent(partner.partner_id)}/policy`}
-            className="btn-secondary"
-          >
-            Change policy
+          <Link href={policyBase} className="btn-secondary">
+            Add policy
           </Link>
         )}
       </div>
 
-      {activePolicies.length === 0 ? (
-        <div className="card text-[color:var(--color-text-muted)]">No active policies.</div>
+      {current.length === 0 ? (
+        <div className="card text-[color:var(--color-text-muted)]">No policies.</div>
       ) : (
-        <div className="space-y-3">
-          {activePolicies.map((p) => (
-            <div key={p.id} className="card">
-              <div className="flex items-center justify-between mb-2">
-                <div className="font-medium">
-                  {controllerLabel(p.data_controller)}{" "}
-                  <span className="text-[color:var(--color-text-muted)] font-normal">
-                    v{p.version} · since {fmtDate(p.effective_from)}
-                    {p.approved_by ? ` · approved by ${p.approved_by}` : ""}
-                  </span>
-                </div>
-                <StatusPill status={p.status} />
-              </div>
-              <PolicySummary policy={p} />
-            </div>
-          ))}
+        <div className="card p-0 overflow-hidden">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Policy</th>
+                <th>Version</th>
+                <th>Status</th>
+                <th>Summary</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {current.map((p) => {
+                const pending = pendingReq.get(policyKeyId(p));
+                const editable = partner.status === "active" && p.status === "active";
+                return (
+                  <tr key={p.id}>
+                    <td className="font-medium whitespace-nowrap">{policyKeyLabel(p)}</td>
+                    <td>
+                      v{p.version}
+                      {p.effective_from && (
+                        <span className="block text-xs text-[color:var(--color-text-muted)]">
+                          since {fmtDate(p.effective_from)}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <StatusPill status={p.status} />
+                    </td>
+                    <td className="text-sm">{policySummaryLine(p)}</td>
+                    <td className="whitespace-nowrap text-right">
+                      {pending ? (
+                        <Link
+                          href={`/requests/${pending}`}
+                          className="text-sm underline underline-offset-2"
+                        >
+                          Change pending
+                        </Link>
+                      ) : (
+                        editable && (
+                          <div className="flex gap-2 justify-end">
+                            <Link
+                              href={`${policyBase}?${new URLSearchParams(
+                                policyRef(p) as Record<string, string>,
+                              )}`}
+                              className="btn-secondary"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              className="btn-danger"
+                              disabled={busy}
+                              onClick={() => {
+                                setRevoking(p);
+                                setRevokeWhy("");
+                              }}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        )
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {otherPolicies.length > 0 && (
+      {revoking && (
+        <div className="card mt-3 space-y-3">
+          <p>
+            Revoke <span className="font-medium">{policyKeyLabel(revoking)}</span> (v
+            {revoking.version})? This raises a policy request; the policy stays in force until
+            the request is approved.
+          </p>
+          <textarea
+            className="field-input"
+            rows={2}
+            value={revokeWhy}
+            onChange={(e) => setRevokeWhy(e.target.value)}
+            placeholder="Why the policy is revoked"
+          />
+          <div className="flex gap-3">
+            <button className="btn-danger" disabled={busy} onClick={() => revoke(revoking)}>
+              {busy ? "Submitting…" : "Raise revoke request"}
+            </button>
+            <button className="btn-secondary" onClick={() => setRevoking(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {history.length > 0 && (
         <div className="mt-3">
           <button
             type="button"
             className="text-sm underline underline-offset-2"
             onClick={() => setShowHistory((v) => !v)}
           >
-            {showHistory ? "Hide" : "Show"} policy version history ({otherPolicies.length})
+            {showHistory ? "Hide" : "Show"} policy version history ({history.length})
           </button>
           {showHistory && (
             <div className="card p-0 overflow-hidden mt-3">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Policy for</th>
+                    <th>Policy</th>
                     <th>Version</th>
                     <th>Status</th>
-                    <th>Grants</th>
+                    <th>Summary</th>
                     <th>Created</th>
                     <th>Request</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {otherPolicies.map((p) => (
+                  {history.map((p) => (
                     <tr key={p.id}>
-                      <td className="font-medium">{controllerLabel(p.data_controller)}</td>
+                      <td className="font-medium whitespace-nowrap">{policyKeyLabel(p)}</td>
                       <td>v{p.version}</td>
                       <td>
                         <StatusPill status={p.status} />
                       </td>
-                      <td className="text-[color:var(--color-text-muted)]">
-                        {(p.data_controller ? p.allowed_data_scopes : p.allowed_use_cases).join(", ")}
+                      <td className="text-sm text-[color:var(--color-text-muted)]">
+                        {policySummaryLine(p)}
                       </td>
                       <td>{fmtDate(p.created_at)}</td>
                       <td>
@@ -275,6 +389,21 @@ export default function PartnerDetailPage() {
       )}
     </div>
   );
+}
+
+// One line: scopes (registry), purposes, algorithms, validity, fetch.
+function policySummaryLine(p: PartnerPolicy) {
+  const any = (v: string[]) => (v.length ? v.join(", ") : "any");
+  return [
+    p.data_controller ? `Scopes: ${p.allowed_data_scopes.join(", ")}` : null,
+    `Purposes: ${any(p.allowed_purposes)}`,
+    p.allowed_subject_id_types.length ? `ID types: ${p.allowed_subject_id_types.join(", ")}` : null,
+    `Algs: ${p.allowed_signing_algs.join(", ")}`,
+    p.max_validity_duration ? `Validity ≤ ${p.max_validity_duration}` : null,
+    labelOf(p.fetch_type),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function Detail({ label, value }: { label: string; value?: string | null }) {

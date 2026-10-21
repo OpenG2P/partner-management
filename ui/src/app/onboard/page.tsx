@@ -366,9 +366,9 @@ function OnboardForm() {
               </button>
             </div>
             <p className="text-xs mb-2 text-[color:var(--color-text-muted)]">
-              What this partner may ask for: per registry (data controller and scopes), or
-              use cases of an exchange. Activated when the onboarding is approved; change later
-              with a policy request.
+              What this partner may ask for: one policy per registry (its scopes) and one per
+              use case of an exchange; add as many as needed. Activated when the onboarding is
+              approved; change later from the partner page.
             </p>
             {policies.map((p, i) => (
               <PolicyEditor

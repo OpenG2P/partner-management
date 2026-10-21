@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..models import IDENTIFIER_PATTERN
 from .key import KeyInput, blank_to_none
-from .policy import PolicyInput, check_distinct_controllers
+from .policy import PolicyInput, PolicyRef, check_distinct_keys
 
 
 def _check_jwks_url(value):
@@ -36,7 +36,11 @@ class OnboardingRequestCreate(BaseModel):
     policies: List[PolicyInput] = Field(default_factory=list)
 
     _jwks_url = field_validator("jwks_url", mode="before")(_check_jwks_url)
-    _policies = field_validator("policies")(check_distinct_controllers)
+
+    @field_validator("policies")
+    @classmethod
+    def _distinct_policies(cls, values):
+        return check_distinct_keys("policies", values)
 
 
 class KeyUpdateRequestCreate(BaseModel):
@@ -59,9 +63,9 @@ class KeyUpdateRequestCreate(BaseModel):
 class PolicyRequestCreate(BaseModel):
     """Change an existing partner's access policies.
 
-    Each policy becomes a new active version on approval (the previous one is
-    superseded); each data controller in ``revoke_data_controllers`` has its
-    active policy revoked (null = the use-case policy).
+    Each policy becomes a new active version of its key (data controller or use
+    case) on approval, superseding the previous one; each entry of ``revoke``
+    has its active policy revoked.
     """
 
     partner_id: str = Field(..., min_length=1, max_length=255)
@@ -69,23 +73,20 @@ class PolicyRequestCreate(BaseModel):
         default=None, description="Why the policy is changing"
     )
     policies: List[PolicyInput] = Field(default_factory=list)
-    revoke_data_controllers: List[Optional[str]] = Field(
-        default_factory=list, examples=[["farmer_registry", None]]
+    revoke: List[PolicyRef] = Field(
+        default_factory=list,
+        examples=[[{"data_controller": "farmer_registry"}, {"use_case": "loan-profile@1"}]],
     )
 
-    _policies = field_validator("policies")(check_distinct_controllers)
-
-    @field_validator("revoke_data_controllers", mode="before")
+    @field_validator("policies")
     @classmethod
-    def _revoke_blank_is_use_case(cls, values):
-        # "" is how a form sends the use-case policy; store it as null. Deduped.
-        out = []
-        for v in values or []:
-            v = blank_to_none(v)
-            v = v.strip() if isinstance(v, str) else v
-            if v not in out:
-                out.append(v)
-        return out
+    def _distinct_policies(cls, values):
+        return check_distinct_keys("policies", values)
+
+    @field_validator("revoke")
+    @classmethod
+    def _distinct_revoke(cls, values):
+        return check_distinct_keys("revoke", values)
 
 
 class RequestReview(BaseModel):
@@ -113,7 +114,8 @@ class PartnerRequestResponse(BaseModel):
     proposed_keys: list = Field(default_factory=list)
     revoke_kids: list = Field(default_factory=list)
     proposed_policies: list = Field(default_factory=list)
-    revoke_data_controllers: list = Field(default_factory=list)
+    # Policies revoked on approval: [{"data_controller": X} | {"use_case": Y}].
+    revoke: list = Field(default_factory=list)
     # Checks that could not run at submission (an unreachable catalogue source):
     # the approver should verify these by hand.
     warnings: list[str] = Field(default_factory=list)
@@ -125,9 +127,9 @@ class PartnerRequestResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-    @field_validator("warnings", mode="before")
+    @field_validator("warnings", "revoke", mode="before")
     @classmethod
-    def _null_warnings(cls, value):
+    def _null_list(cls, value):
         return value or []
 
 

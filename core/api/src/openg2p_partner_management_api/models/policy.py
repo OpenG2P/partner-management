@@ -14,7 +14,8 @@ _JSONList = JSON().with_variant(JSONB(), "postgresql")
 
 class PolicyStatus(str, Enum):
     # pending: proposed by an open request, not served.
-    # active: served by the policy-fetch API (one per partner + data controller).
+    # active: served by the policy-fetch API (one per policy key: partner + data
+    #   controller, or partner + use case).
     # superseded: replaced by a newer approved version.
     # rejected: its request was rejected.
     # revoked: withdrawn by an approved policy request; nothing replaces it.
@@ -31,11 +32,12 @@ class FetchType(str, Enum):
 
 
 class PartnerPolicy(BaseModelWithId):
-    """What a partner may access, versioned per (partner, data controller).
+    """What a partner may access, versioned per policy key.
 
-    ``data_controller`` set = a scope policy for one registry
-    (``allowed_data_scopes``); null = a use-case policy for an exchange
-    (``allowed_use_cases``). Changes are made only through partner requests:
+    Exactly one of ``data_controller`` / ``use_case`` is set: a scope policy for
+    one registry (``allowed_data_scopes``), keyed by (partner, data_controller),
+    or a use-case policy for one exchange use case (``name@major``), keyed by
+    (partner, use_case). Changes are made only through partner requests:
     each request creates ``pending`` versions that approval turns ``active``
     (the previous active version becomes ``superseded``). Rows are never deleted.
     """
@@ -43,17 +45,18 @@ class PartnerPolicy(BaseModelWithId):
     __tablename__ = "pm_partner_policies"
 
     partner_id: Mapped[str] = mapped_column(String(255), index=True)
-    # Registry's controller id (e.g. "farmer_registry"); null = use-case policy.
+    # Registry's controller id (e.g. "farmer_registry"); set for a scope policy.
     data_controller: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, index=True
     )
+    # Use case granted (name@major, e.g. "loan-profile@1"); set for a use-case policy.
+    use_case: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     version: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(
         String(20), default=PolicyStatus.pending.value, index=True
     )
 
     allowed_data_scopes: Mapped[list] = mapped_column(_JSONList, default=list)
-    allowed_use_cases: Mapped[list] = mapped_column(_JSONList, default=list)
     allowed_purposes: Mapped[list] = mapped_column(_JSONList, default=list)
     allowed_subject_id_types: Mapped[list] = mapped_column(_JSONList, default=list)
     allowed_signing_algs: Mapped[list] = mapped_column(_JSONList, default=list)

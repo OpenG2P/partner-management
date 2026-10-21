@@ -9,8 +9,8 @@ export interface PartnerRequest {
   proposed_keys: ProposedKey[];
   revoke_kids: string[];
   proposed_policies: PolicyInput[];
-  // null = the use-case policy.
-  revoke_data_controllers: (string | null)[];
+  // Policies revoked on approval, by key.
+  revoke: PolicyRef[];
   // Checks that could not run at submission (a catalogue source was unreachable).
   warnings: string[];
   status: "created" | "approved" | "rejected";
@@ -70,12 +70,19 @@ export interface PartnerKey {
   created_at: string;
 }
 
-// What a partner may access. data_controller set = a scope policy for that
-// registry (allowed_data_scopes); null = a use-case policy (allowed_use_cases).
+// Names one policy of a partner: exactly one of the two is set.
+export interface PolicyRef {
+  data_controller?: string | null;
+  use_case?: string | null;
+}
+
+// What a partner may access, one policy per key: data_controller set = a scope
+// policy for that registry (allowed_data_scopes); use_case set (name@major) = a
+// policy for that exchange use case.
 export interface PolicyInput {
   data_controller: string | null;
+  use_case: string | null;
   allowed_data_scopes: string[];
-  allowed_use_cases: string[];
   allowed_purposes: string[];
   allowed_subject_id_types: string[];
   allowed_signing_algs: string[];

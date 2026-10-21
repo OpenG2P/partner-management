@@ -25,6 +25,7 @@ from ..models import (
     RequestStatus,
     RequestType,
 )
+from ..schemas.policy import policy_label
 from .audit_service import AuditService
 from .catalogue_service import CatalogueService
 from .key_service import KeyService
@@ -106,9 +107,8 @@ class RequestService(BaseService):
                 continue
             unmatched = [a for a in p.allowed_signing_algs if a not in key_algs]
             if unmatched:
-                target = f"'{p.data_controller}'" if p.data_controller else "use cases"
                 warnings.append(
-                    f"Policy for {target}: signing algorithms {unmatched} match none of "
+                    f"Policy for {policy_label(p.key)}: signing algorithms {unmatched} match none of "
                     f"{whose} ({', '.join(sorted(key_algs)) or 'none'}); the partner cannot "
                     "sign with them until it has such a key."
                 )
@@ -149,7 +149,7 @@ class RequestService(BaseService):
                 proposed_keys=proposed,
                 revoke_kids=[],
                 proposed_policies=[p.model_dump() for p in data.policies],
-                revoke_data_controllers=[],
+                revoke=[],
                 warnings=warnings,
                 status=RequestStatus.created.value,
                 submitted_by=actor_name,
@@ -181,7 +181,7 @@ class RequestService(BaseService):
                 details={
                     "type": RequestType.onboarding.value,
                     "keys": len(proposed),
-                    "policies": [p.data_controller for p in data.policies],
+                    "policies": [p.key[1] for p in data.policies],
                     **({"warnings": warnings} if warnings else {}),
                 },
             )
@@ -259,7 +259,6 @@ class RequestService(BaseService):
                 f"Partner '{data.partner_id}' is disabled; enable it before changing its policies."
             )
 
-        revoke = list(data.revoke_data_controllers or [])
         warnings = await self._check_catalogue(data.policies)
         active_algs = {
             k.algorithm
@@ -270,7 +269,9 @@ class RequestService(BaseService):
             data.policies, active_algs, "the partner's active keys' algorithms"
         )
         async with _sm()() as session:
-            await self.policies.check_proposal(session, data.partner_id, data.policies, revoke)
+            await self.policies.check_proposal(
+                session, data.partner_id, data.policies, data.revoke
+            )
             req = PartnerRequest(
                 request_type=RequestType.policy.value,
                 partner_id=data.partner_id,
@@ -278,7 +279,7 @@ class RequestService(BaseService):
                 proposed_keys=[],
                 revoke_kids=[],
                 proposed_policies=[p.model_dump() for p in data.policies],
-                revoke_data_controllers=revoke,
+                revoke=[r.as_dict() for r in data.revoke],
                 warnings=warnings,
                 status=RequestStatus.created.value,
                 submitted_by=(actor or {}).get("name"),
@@ -297,8 +298,8 @@ class RequestService(BaseService):
                 actor=actor,
                 details={
                     "type": RequestType.policy.value,
-                    "policies": [p.data_controller for p in data.policies],
-                    "revoke_data_controllers": revoke,
+                    "policies": [p.key[1] for p in data.policies],
+                    "revoke": [r.key[1] for r in data.revoke],
                     **({"warnings": warnings} if warnings else {}),
                 },
             )

@@ -110,8 +110,8 @@ def _scope(*scopes, controller=FARMER):
     return {"data_controller": controller, "allowed_data_scopes": list(scopes)}
 
 
-def _use_cases(*refs):
-    return {"data_controller": None, "allowed_use_cases": list(refs)}
+def _use_case(ref):
+    return {"use_case": ref}
 
 
 def test_catalogue_none_configured(client):
@@ -182,7 +182,7 @@ def test_scopes_source_needs_controller():
 def test_known_names_accepted(client, keys, upstream):
     r = _onboard(
         client, keys, "PARTNER_CAT_OK",
-        [_scope("farmer_registry.basic"), _use_cases("loan-profile@1")],
+        [_scope("farmer_registry.basic"), _use_case("loan-profile@1")],
     )
     assert r.status_code == 200, r.text
     assert r.json()["warnings"] == []
@@ -203,7 +203,7 @@ def test_unknown_scope_rejected(client, keys, upstream):
 
 
 def test_unknown_use_case_rejected(client, keys, upstream):
-    r = _onboard(client, keys, "PARTNER_CAT_BAD_UC", [_use_cases("loan-profile@2")])
+    r = _onboard(client, keys, "PARTNER_CAT_BAD_UC", [_use_case("loan-profile@2")])
     assert r.status_code == 400
     assert "loan-profile@2" in r.json()["errors"][0]["message"]
 
@@ -240,7 +240,7 @@ def test_policy_request_checked(client, keys, upstream):
 
 
 def test_no_sources_unchanged(client, keys):
-    r = _onboard(client, keys, "PARTNER_CAT_NONE", [_scope("anything.goes"), _use_cases("x@1")])
+    r = _onboard(client, keys, "PARTNER_CAT_NONE", [_scope("anything.goes"), _use_case("x@1")])
     assert r.status_code == 200, r.text
     assert r.json()["warnings"] == []
 
@@ -369,7 +369,7 @@ def test_mds_list_not_in_pack(client, keys, mds):
     # Not checked, no warning.
     r = _onboard(
         client, keys, "PARTNER_MDS_NOLIST",
-        [_with(_use_cases("x@1"), allowed_subject_id_types=["ANY_ID"])],
+        [_with(_use_case("x@1"), allowed_subject_id_types=["ANY_ID"])],
     )
     assert r.status_code == 200, r.text
     assert r.json()["warnings"] == []
@@ -378,7 +378,7 @@ def test_mds_list_not_in_pack(client, keys, mds):
 def test_mds_known_values_accepted(client, keys, mds):
     r = _onboard(
         client, keys, "PARTNER_MDS_OK",
-        [_with(_use_cases("x@1"), allowed_purposes=["SUBSIDY"], allowed_subject_id_types=["FAYDA_FIN"])],
+        [_with(_use_case("x@1"), allowed_purposes=["SUBSIDY"], allowed_subject_id_types=["FAYDA_FIN"])],
     )
     assert r.status_code == 200, r.text
     assert r.json()["warnings"] == []
@@ -388,7 +388,7 @@ def test_mds_unknown_values_rejected(client, keys, mds):
     r = _onboard(
         client, keys, "PARTNER_MDS_BAD",
         [
-            _with(_use_cases("x@1"), allowed_purposes=["SUBSIDY", "OLD_PURPOSE", "MARKETING"]),
+            _with(_use_case("x@1"), allowed_purposes=["SUBSIDY", "OLD_PURPOSE", "MARKETING"]),
             _with(_scope("crop.any", controller="crop_registry"), allowed_subject_id_types=["PASSPORT"]),
         ],
     )
@@ -407,7 +407,7 @@ def test_mds_down_accepts_with_warning(client, keys, mds):
     assert all(s["items"] == [] and "cannot reach Master Data" in s["error"] for s in sources)
     r = _onboard(
         client, keys, "PARTNER_MDS_DOWN",
-        [_with(_use_cases("x@1"), allowed_purposes=["ANYTHING"])],
+        [_with(_use_case("x@1"), allowed_purposes=["ANYTHING"])],
     )
     assert r.status_code == 200, r.text
     (warning,) = r.json()["warnings"]
@@ -432,7 +432,7 @@ def test_mds_token_refused_is_an_error(client, mds, monkeypatch):
 def test_signing_alg_warning_on_onboarding(client, keys):
     r = _onboard(
         client, keys, "PARTNER_ALG_ONB",
-        [_with(_use_cases("x@1"), allowed_signing_algs=["EdDSA", "RS256"])],
+        [_with(_use_case("x@1"), allowed_signing_algs=["EdDSA", "RS256"])],
     )
     assert r.status_code == 200, r.text
     (warning,) = r.json()["warnings"]
@@ -440,7 +440,7 @@ def test_signing_alg_warning_on_onboarding(client, keys):
     # Matching algorithms (or the default, not chosen): no warning.
     r = _onboard(
         client, keys, "PARTNER_ALG_ONB2",
-        [_with(_use_cases("x@1"), allowed_signing_algs=["EdDSA"]), _scope("a.b")],
+        [_with(_use_case("x@1"), allowed_signing_algs=["EdDSA"]), _scope("a.b")],
     )
     assert r.json()["warnings"] == []
 

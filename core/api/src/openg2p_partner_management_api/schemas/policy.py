@@ -68,13 +68,63 @@ def _clean_list(values: List[str]) -> List[str]:
     return out
 
 
+def _blank_key(value):
+    value = blank_to_none(value)
+    return value.strip() or None if isinstance(value, str) else value
+
+
+def _check_one_key(data_controller, use_case) -> None:
+    if data_controller and use_case:
+        raise ValueError("data_controller, use_case: set one, not both")
+    if not data_controller and not use_case:
+        raise ValueError(
+            "data_controller, use_case: set one (a registry's scope policy or a use-case policy)"
+        )
+
+
+def policy_label(key: tuple) -> str:
+    """'registry farmer_registry' / 'use case loan-profile@1' for a policy key."""
+    kind, value = key
+    return f"{'registry' if kind == 'data_controller' else 'use case'} {value}"
+
+
+class PolicyRef(BaseModel):
+    """Names one policy of a partner: ``{"data_controller": X}`` or ``{"use_case": Y}``."""
+
+    data_controller: Optional[str] = Field(
+        default=None, max_length=255, pattern=IDENTIFIER_PATTERN, examples=["farmer_registry"]
+    )
+    use_case: Optional[str] = Field(
+        default=None, max_length=255, pattern=USE_CASE_PATTERN, examples=["loan-profile@1"]
+    )
+
+    _blank = field_validator("data_controller", "use_case", mode="before")(_blank_key)
+
+    @model_validator(mode="after")
+    def _one_key(self):
+        _check_one_key(self.data_controller, self.use_case)
+        return self
+
+    @property
+    def key(self) -> tuple:
+        if self.data_controller:
+            return ("data_controller", self.data_controller)
+        return ("use_case", self.use_case)
+
+    def as_dict(self) -> dict:
+        kind, value = self.key
+        return {kind: value}
+
+
 class PolicyInput(BaseModel):
     """One policy proposed by an onboarding or policy request.
 
-    - ``data_controller`` set (e.g. ``farmer_registry``): a scope policy for that
-      registry — ``allowed_data_scopes`` required, ``allowed_use_cases`` empty.
-    - ``data_controller`` null / "": a use-case policy (an exchange) —
-      ``allowed_use_cases`` (``name@major``) required, ``allowed_data_scopes`` empty.
+    Exactly one of:
+    - ``data_controller`` (e.g. ``farmer_registry``): a scope policy for that
+      registry — ``allowed_data_scopes`` required;
+    - ``use_case`` (``name@major``, e.g. ``loan-profile@1``): a use-case policy
+      for that exchange use case — ``allowed_data_scopes`` empty.
+    Other fields:
     - purposes / subject id types: empty = any; codes of the country's Master
       Data lists (CONSENT_PURPOSE, SUBJECT_ID_TYPE) when configured, else free.
     - ``allowed_signing_algs``: at least one of ``GET /metadata`` → ``signing_algorithms``;
@@ -88,8 +138,10 @@ class PolicyInput(BaseModel):
     data_controller: Optional[str] = Field(
         default=None, max_length=255, pattern=IDENTIFIER_PATTERN, examples=["farmer_registry"]
     )
+    # Error messages name the field: the platform's error handler returns only
+    # the message, not its location.
+    use_case: Optional[str] = Field(default=None, max_length=255, examples=["loan-profile@1"])
     allowed_data_scopes: List[str] = Field(default_factory=list)
-    allowed_use_cases: List[str] = Field(default_factory=list, examples=[["loan-profile@1"]])
     allowed_purposes: List[str] = Field(default_factory=list)
     allowed_subject_id_types: List[str] = Field(default_factory=list)
     allowed_signing_algs: List[str] = Field(default_factory=lambda: list(DEFAULT_SIGNING_ALGS))
@@ -98,31 +150,22 @@ class PolicyInput(BaseModel):
     max_fetch_frequency: Optional[str] = None
     data_life: Optional[str] = Field(default=None, examples=["P30D"])
 
-    @field_validator("data_controller", mode="before")
-    @classmethod
-    def _blank_controller(cls, value):
-        value = blank_to_none(value)
-        return value.strip() if isinstance(value, str) else value
+    _blank = field_validator("data_controller", "use_case", mode="before")(_blank_key)
 
     @field_validator(
-        "allowed_data_scopes", "allowed_use_cases", "allowed_purposes",
+        "allowed_data_scopes", "allowed_purposes",
         "allowed_subject_id_types", "allowed_signing_algs",
     )
     @classmethod
     def _clean(cls, values: List[str]) -> List[str]:
         return _clean_list(values)
 
-    # Error messages name the field: the platform's error handler returns only
-    # the message, not its location.
-    @field_validator("allowed_use_cases")
+    @field_validator("use_case")
     @classmethod
-    def _use_case_refs(cls, values: List[str]) -> List[str]:
-        bad = [v for v in values if not re.match(USE_CASE_PATTERN, v)]
-        if bad:
-            raise ValueError(
-                f"allowed_use_cases: {bad} must be 'name@major' (e.g. loan-profile@1)"
-            )
-        return values
+    def _use_case_ref(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not re.match(USE_CASE_PATTERN, value):
+            raise ValueError(f"use_case: {value!r} must be 'name@major' (e.g. loan-profile@1)")
+        return value
 
     @field_validator("allowed_signing_algs")
     @classmethod
@@ -155,36 +198,37 @@ class PolicyInput(BaseModel):
 
     @model_validator(mode="after")
     def _scope_or_use_case(self):
-        if self.data_controller:
-            if not self.allowed_data_scopes:
-                raise ValueError(
-                    f"allowed_data_scopes: required for data controller '{self.data_controller}'"
-                )
-            if self.allowed_use_cases:
-                raise ValueError(
-                    "allowed_use_cases: only for a use-case policy (no data controller)"
-                )
-        else:
-            if not self.allowed_use_cases:
-                raise ValueError("allowed_use_cases: required for a use-case policy")
-            if self.allowed_data_scopes:
-                raise ValueError(
-                    "allowed_data_scopes: only for a data controller's policy "
-                    "(set data_controller)"
-                )
+        _check_one_key(self.data_controller, self.use_case)
+        if self.data_controller and not self.allowed_data_scopes:
+            raise ValueError(
+                f"allowed_data_scopes: required for data controller '{self.data_controller}'"
+            )
+        if self.use_case and self.allowed_data_scopes:
+            raise ValueError(
+                "allowed_data_scopes: only for a registry's policy (set data_controller)"
+            )
         return self
 
+    @property
+    def key(self) -> tuple:
+        """The policy key: ("data_controller", X) or ("use_case", Y)."""
+        if self.data_controller:
+            return ("data_controller", self.data_controller)
+        return ("use_case", self.use_case)
 
-def check_distinct_controllers(policies: List[PolicyInput]) -> List[PolicyInput]:
-    """At most one policy per data controller (null counts once) in a request."""
-    seen, dup = set(), set()
-    for p in policies:
-        if p.data_controller in seen:
-            dup.add(p.data_controller or "(use cases)")
-        seen.add(p.data_controller)
+
+def check_distinct_keys(field: str, items: list) -> list:
+    """At most one entry per policy key (data controller or use case) in ``field``."""
+    seen, dup = set(), []
+    for p in items:
+        if p.key in seen and p.key not in dup:
+            dup.append(p.key)
+        seen.add(p.key)
     if dup:
-        raise ValueError(f"policies: more than one policy for {sorted(dup)}")
-    return policies
+        raise ValueError(
+            f"{field}: more than one entry for {', '.join(policy_label(k) for k in dup)}"
+        )
+    return items
 
 
 class PolicyOut(BaseModel):
@@ -192,11 +236,13 @@ class PolicyOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    # This policy version's id: consumers record it to say which version they applied.
+    id: str
     partner_id: str
     data_controller: Optional[str] = None
+    use_case: Optional[str] = None
     version: int
     allowed_data_scopes: List[str] = Field(default_factory=list)
-    allowed_use_cases: List[str] = Field(default_factory=list)
     allowed_purposes: List[str] = Field(default_factory=list)
     allowed_subject_id_types: List[str] = Field(default_factory=list)
     allowed_signing_algs: List[str] = Field(default_factory=list)
@@ -220,7 +266,6 @@ class PolicyListOut(BaseModel):
 class PolicyResponse(PolicyOut):
     """Staff view of one policy version (any status)."""
 
-    id: str
     status: str  # pending | active | superseded | rejected | revoked
     request_id: str
     created_by: Optional[str] = None

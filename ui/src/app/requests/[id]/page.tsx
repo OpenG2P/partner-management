@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { labelOf } from "@/lib/metadata";
 import { PartnerRequest } from "@/lib/types";
-import { PolicySummary, controllerLabel } from "@/components/policy";
+import { PolicySummary, policyKeyId, policyKeyLabel } from "@/components/policy";
 import {
   PageHeader,
   StatusPill,
@@ -123,17 +123,17 @@ export default function RequestDetailPage() {
         )}
       </div>
 
-      {(req.proposed_policies?.length > 0 || req.revoke_data_controllers?.length > 0) && (
+      {(req.proposed_policies?.length > 0 || req.revoke?.length > 0) && (
         <div className="card mb-4">
           <h2 className="text-lg mb-3">Proposed policies</h2>
           {req.proposed_policies?.length ? (
             <ul className="space-y-3">
               {req.proposed_policies.map((p) => (
                 <li
-                  key={p.data_controller ?? ""}
+                  key={policyKeyId(p)}
                   className="border border-[color:var(--color-border)] rounded-md p-3"
                 >
-                  <div className="font-medium mb-1">{controllerLabel(p.data_controller)}</div>
+                  <div className="font-medium mb-1">{policyKeyLabel(p)}</div>
                   <PolicySummary policy={p} />
                 </li>
               ))}
@@ -141,11 +141,15 @@ export default function RequestDetailPage() {
           ) : (
             <p className="text-[color:var(--color-text-muted)]">No new policy versions.</p>
           )}
-          {req.revoke_data_controllers?.length > 0 && (
-            <div className="mt-3 text-sm">
-              <span className="text-[color:var(--color-text-muted)]">Revoking policies: </span>
-              {req.revoke_data_controllers.map(controllerLabel).join(", ")}
-            </div>
+          {req.revoke?.length > 0 && (
+            <ul className="mt-3 text-sm space-y-1">
+              {req.revoke.map((r) => (
+                <li key={policyKeyId(r)}>
+                  <span className="text-[color:var(--color-danger)]">Revoke </span>
+                  {policyKeyLabel(r)}
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}

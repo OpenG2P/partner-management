@@ -324,7 +324,7 @@ class CatalogueService(BaseService):
                 names, what = p.allowed_data_scopes, f"scopes for '{p.data_controller}'"
             else:
                 relevant = [s for s in sources if s.kind == "use_cases"]
-                names, what = p.allowed_use_cases, "use cases"
+                names, what = [p.use_case], "use case"
             if not relevant:
                 continue
             reads = [await self.read(s) for s in relevant]

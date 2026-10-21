@@ -19,7 +19,7 @@ Built on [`openg2p-fastapi-common`](https://github.com/openg2p/openg2p-fastapi-c
   `partner_id` (and optionally `kid`), plus a per-partner JWKS view. Fail-closed:
   unknown/disabled partners get a uniform `404 not available`.
 - **Policies** — what a partner may access, one versioned policy per (partner,
-  data controller); `data_controller` null = a use-case policy (an exchange).
+  data controller) for a registry or per (partner, use case) for an exchange use case.
   Set at onboarding or by a `policy` request (new versions / revocations), applied
   on approval. Served fail-closed by `GET /policies/{partner_id}`.
 
@@ -43,7 +43,7 @@ Built on [`openg2p-fastapi-common`](https://github.com/openg2p/openg2p-fastapi-c
 | GET | `/keys/{partner_id}` | **none** | Active public keys |
 | GET | `/keys/{partner_id}/{kid}` | **none** | One active public key |
 | GET | `/keys/{partner_id}/jwks.json` | **none** | JWKS view |
-| GET | `/policies/{partner_id}` | **none** | Active policies (`?data_controller=`; empty = use-case policy) |
+| GET | `/policies/{partner_id}` | **none** | Active policies: all, or `?data_controller=` / `?use_case=` |
 | GET | `/policies` | **none** | Active policies of active partners; `?use_case=` and/or `?data_controller=` required |
 | GET | `/ping` | none | Health check |
 

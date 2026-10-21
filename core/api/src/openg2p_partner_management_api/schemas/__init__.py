@@ -16,6 +16,7 @@ from .policy import (
     PartnerPoliciesOut,
     PolicyInput,
     PolicyListOut,
+    PolicyRef,
     PolicyOut,
     PolicyResponse,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "KeyUpdateRequestCreate",
     "PolicyRequestCreate",
     "PolicyInput",
+    "PolicyRef",
     "PolicyOut",
     "PolicyResponse",
     "PartnerPoliciesOut",

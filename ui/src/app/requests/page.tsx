@@ -124,7 +124,7 @@ function changesOf(r: PartnerRequest): string {
   const keys = part(r.proposed_keys?.length || 0, r.revoke_kids?.length || 0, "key", "keys");
   const policies = part(
     r.proposed_policies?.length || 0,
-    r.revoke_data_controllers?.length || 0,
+    r.revoke?.length || 0,
     "policy",
     "policies"
   );

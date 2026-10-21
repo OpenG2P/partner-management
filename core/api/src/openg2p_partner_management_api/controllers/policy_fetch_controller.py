@@ -15,10 +15,11 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 _DATA_CONTROLLER = Query(
     None,
     description=(
-        "Only this data controller's policy (e.g. `farmer_registry`). "
-        "Empty (`?data_controller=`) = the use-case policy. Omit for all."
+        "Only this registry's policy (e.g. `farmer_registry`). "
+        "Empty (`?data_controller=`) = use-case policies only."
     ),
 )
+_USE_CASE = Query(None, description="Only the policy for this use case (`name@major`).")
 
 
 class PolicyFetchController(BaseController):
@@ -55,8 +56,10 @@ class PolicyFetchController(BaseController):
         partner_id: str,
         response: Response,
         data_controller: Optional[str] = _DATA_CONTROLLER,
+        use_case: Optional[str] = _USE_CASE,
     ) -> PartnerPoliciesOut:
-        rows = await self.policies.get_servable_policies(partner_id, data_controller)
+        """Active policies of an active partner; no filter = all of them."""
+        rows = await self.policies.get_servable_policies(partner_id, data_controller, use_case)
         if not rows:
             raise PoliciesNotAvailableError(partner_id)
         self._cache(response)
@@ -68,9 +71,7 @@ class PolicyFetchController(BaseController):
     async def list_policies(
         self,
         response: Response,
-        use_case: Optional[str] = Query(
-            None, description="Only policies granting this use case (`name@major`)."
-        ),
+        use_case: Optional[str] = _USE_CASE,
         data_controller: Optional[str] = _DATA_CONTROLLER,
     ) -> PolicyListOut:
         # A filter is required: no listing of every partner's policies.

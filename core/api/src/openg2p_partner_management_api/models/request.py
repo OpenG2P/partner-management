@@ -51,9 +51,8 @@ class PartnerRequest(BaseModelWithId):
     # Policies proposed (PolicyInput dicts), also stored as pending
     # pm_partner_policies versions carrying this request's id.
     proposed_policies: Mapped[list] = mapped_column(_JSONList, default=list)
-    # Data controllers whose active policy is revoked on approval (null = the
-    # use-case policy).
-    revoke_data_controllers: Mapped[list] = mapped_column(_JSONList, default=list)
+    # Policies revoked on approval, by key: [{"data_controller": X} | {"use_case": Y}].
+    revoke: Mapped[list] = mapped_column("revoke_policies", _JSONList, default=list)
     # Checks that could not run at submission (e.g. a catalogue source was
     # unreachable), for the approver to verify by hand.
     warnings: Mapped[list] = mapped_column(_JSONList, default=list, nullable=True)

@@ -4,14 +4,16 @@ import pytest
 
 FARMER = "farmer_registry"
 CROP = "crop_registry"
+LOAN = "loan-profile@1"
+NAME = "name-check@2"
 
 
 def _scope_policy(controller=FARMER, scopes=("farmer.basic",), **extra):
     return {"data_controller": controller, "allowed_data_scopes": list(scopes), **extra}
 
 
-def _use_case_policy(use_cases=("loan-profile@1",), **extra):
-    return {"data_controller": None, "allowed_use_cases": list(use_cases), **extra}
+def _use_case_policy(use_case=LOAN, **extra):
+    return {"use_case": use_case, **extra}
 
 
 def _onboard(client, keys, partner_id, policies):
@@ -33,7 +35,9 @@ def _policy_request(client, partner_id, policies=(), revoke=()):
             "partner_id": partner_id,
             "description": "change",
             "policies": list(policies),
-            "revoke_data_controllers": list(revoke),
+            "revoke": [
+                {"use_case": k} if "@" in k else {"data_controller": k} for k in revoke
+            ],
         },
     )
 
@@ -50,7 +54,7 @@ def _code(r):
 
 def _versions(client, partner_id):
     rows = client.get(f"/partners/{partner_id}/policies", params={"all_versions": "true"}).json()
-    return {(p["data_controller"], p["version"]): p["status"] for p in rows}
+    return {(p["data_controller"] or p["use_case"], p["version"]): p["status"] for p in rows}
 
 
 @pytest.fixture(scope="module")
@@ -71,16 +75,16 @@ def bank(client, keys):
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert len(body["proposed_policies"]) == 2 and body["revoke_data_controllers"] == []
+    assert len(body["proposed_policies"]) == 2 and body["revoke"] == []
     # Pending until approved: not served.
-    assert _versions(client, "PARTNER_BANK_A") == {(FARMER, 1): "pending", (None, 1): "pending"}
+    assert _versions(client, "PARTNER_BANK_A") == {(FARMER, 1): "pending", (LOAN, 1): "pending"}
     assert client.get("/policies/PARTNER_BANK_A").status_code == 404
     _approve(client, body["id"])
     return "PARTNER_BANK_A"
 
 
 def test_onboarding_activates_policies(client, bank):
-    assert _versions(client, bank) == {(FARMER, 1): "active", (None, 1): "active"}
+    assert _versions(client, bank) == {(FARMER, 1): "active", (LOAN, 1): "active"}
     r = client.get(f"/policies/{bank}")
     assert r.status_code == 200
     assert r.headers["cache-control"] == "public, max-age=60"
@@ -93,9 +97,12 @@ def test_onboarding_activates_policies(client, bank):
     assert farmer["allowed_signing_algs"] == ["EdDSA", "ES256"]
     assert farmer["fetch_type"] == "oneshot"
     assert farmer["version"] == 1 and farmer["effective_from"]
+    # The version's id, as the staff API lists it.
+    staff = client.get(f"/partners/{bank}/policies").json()
+    assert farmer["id"] == next(p["id"] for p in staff if p["data_controller"] == FARMER)
     assert set(farmer) == {
-        "partner_id", "data_controller", "version", "allowed_data_scopes",
-        "allowed_use_cases", "allowed_purposes", "allowed_subject_id_types",
+        "id", "partner_id", "data_controller", "use_case", "version", "allowed_data_scopes",
+        "allowed_purposes", "allowed_subject_id_types",
         "allowed_signing_algs", "max_validity_duration", "fetch_type",
         "max_fetch_frequency", "data_life", "effective_from",
     }
@@ -104,13 +111,18 @@ def test_onboarding_activates_policies(client, bank):
 def test_fetch_filters(client, bank):
     r = client.get(f"/policies/{bank}", params={"data_controller": FARMER})
     assert [p["data_controller"] for p in r.json()["policies"]] == [FARMER]
-    # Empty value = the use-case policy.
+    r = client.get(f"/policies/{bank}", params={"use_case": LOAN})
+    assert [(p["use_case"], p["data_controller"]) for p in r.json()["policies"]] == [(LOAN, None)]
+    # Empty data_controller = the use-case policies.
     r = client.get(f"/policies/{bank}?data_controller=")
-    assert r.status_code == 200
-    assert [p["allowed_use_cases"] for p in r.json()["policies"]] == [["loan-profile@1"]]
+    assert [p["use_case"] for p in r.json()["policies"]] == [LOAN]
+    # No filter = all active policies, registries first.
+    r = client.get(f"/policies/{bank}")
+    assert [p["data_controller"] or p["use_case"] for p in r.json()["policies"]] == [FARMER, LOAN]
     # No matching policy: the same fail-closed 404.
-    r = client.get(f"/policies/{bank}", params={"data_controller": "land_registry"})
-    assert r.status_code == 404 and _code(r) == "PM-POLICY-404"
+    for params in ({"data_controller": "land_registry"}, {"use_case": "other@1"}):
+        r = client.get(f"/policies/{bank}", params=params)
+        assert r.status_code == 404 and _code(r) == "PM-POLICY-404"
 
 
 def test_fetch_fail_closed(client, bank):
@@ -127,9 +139,12 @@ def test_fetch_fail_closed(client, bank):
 
 
 def test_list_by_use_case(client, bank):
-    r = client.get("/policies", params={"use_case": "loan-profile@1"})
+    r = client.get("/policies", params={"use_case": LOAN})
     assert r.status_code == 200 and "max-age=60" in r.headers["cache-control"]
-    assert [(p["partner_id"], p["data_controller"]) for p in r.json()["policies"]] == [(bank, None)]
+    assert [(p["partner_id"], p["use_case"]) for p in r.json()["policies"]] == [(bank, LOAN)]
+    assert r.json()["policies"][0]["id"] == (
+        client.get(f"/policies/{bank}", params={"use_case": LOAN}).json()["policies"][0]["id"]
+    )
     assert client.get("/policies", params={"use_case": "other@1"}).json()["count"] == 0
     r = client.get("/policies", params={"data_controller": FARMER})
     assert bank in {p["partner_id"] for p in r.json()["policies"]}
@@ -162,7 +177,9 @@ def test_policy_request_versions_and_supersedes(client, bank):
     assert p["version"] == 2 and p["allowed_data_scopes"] == ["farmer.basic"]
     # Staff default view: active only.
     active = client.get(f"/partners/{bank}/policies").json()
-    assert {(a["data_controller"], a["version"]) for a in active} == {(FARMER, 2), (None, 1)}
+    assert {(a["data_controller"] or a["use_case"], a["version"]) for a in active} == {
+        (FARMER, 2), (LOAN, 1)
+    }
 
 
 def test_policy_request_reject(client, bank):
@@ -178,26 +195,72 @@ def test_policy_request_reject(client, bank):
     assert _versions(client, bank)[(CROP, 2)] == "active"
 
 
+def test_use_case_policies_independent(client, bank):
+    """Each use case is its own policy: versioned, pending and revoked separately."""
+    r = _policy_request(client, bank, [_use_case_policy(NAME, allowed_purposes=["kyc"])])
+    assert r.status_code == 200, r.text
+    _approve(client, r.json()["id"])
+    versions = _versions(client, bank)
+    assert versions[(NAME, 1)] == "active" and versions[(LOAN, 1)] == "active"
+    r = client.get(f"/policies/{bank}", params={"use_case": NAME})
+    assert r.json()["policies"][0]["allowed_purposes"] == ["kyc"]
+
+    loan_v1_id = client.get(f"/policies/{bank}", params={"use_case": LOAN}).json()["policies"][0]["id"]
+    # A pending change to one use case blocks only that use case.
+    loan = _policy_request(client, bank, [_use_case_policy(LOAN, allowed_purposes=["loan"])])
+    assert loan.status_code == 200, loan.text
+    clash = _policy_request(client, bank, [_use_case_policy(LOAN)])
+    assert clash.status_code == 400 and _code(clash) == "PM-POLICY-409"
+    assert _code(_policy_request(client, bank, revoke=[LOAN])) == "PM-POLICY-409"
+    name = _policy_request(client, bank, revoke=[NAME])
+    assert name.status_code == 200, name.text
+    assert name.json()["revoke"] == [{"use_case": NAME}]
+
+    _approve(client, loan.json()["id"])
+    _approve(client, name.json()["id"])
+    versions = _versions(client, bank)
+    assert versions[(LOAN, 1)] == "superseded" and versions[(LOAN, 2)] == "active"
+    assert versions[(NAME, 1)] == "revoked"
+    r = client.get(f"/policies/{bank}", params={"use_case": LOAN})
+    assert r.json()["policies"][0]["allowed_purposes"] == ["loan"]
+    assert r.json()["policies"][0]["id"] != loan_v1_id  # each version has its own id
+    assert client.get(f"/policies/{bank}", params={"use_case": NAME}).status_code == 404
+    assert client.get("/policies", params={"use_case": NAME}).json()["count"] == 0
+
+
 def test_policy_revoke(client, bank):
-    # Revoking needs an active policy; "" names the use-case policy.
-    r = _policy_request(client, bank, revoke=["land_registry"])
-    assert r.status_code == 400 and _code(r) == "PM-POLICY-400"
+    # Revoking needs an active policy, and not a change to the same key.
+    for revoke in (["land_registry"], ["other@1"]):
+        r = _policy_request(client, bank, revoke=revoke)
+        assert r.status_code == 400 and _code(r) == "PM-POLICY-400"
     r = _policy_request(client, bank, [_scope_policy(controller=CROP)], revoke=[CROP])
     assert _code(r) == "PM-POLICY-400"
     assert _code(_policy_request(client, bank)) == "PM-POLICY-400"
 
-    r = _policy_request(client, bank, revoke=[CROP, ""])
+    r = _policy_request(client, bank, revoke=[CROP, LOAN])
     assert r.status_code == 200, r.text
-    assert r.json()["revoke_data_controllers"] == [CROP, None]
+    assert r.json()["revoke"] == [{"data_controller": CROP}, {"use_case": LOAN}]
     _approve(client, r.json()["id"])
     versions = _versions(client, bank)
-    assert versions[(CROP, 2)] == "revoked" and versions[(None, 1)] == "revoked"
+    assert versions[(CROP, 2)] == "revoked" and versions[(LOAN, 2)] == "revoked"
     assert client.get(f"/policies/{bank}?data_controller=").status_code == 404
-    assert client.get("/policies", params={"use_case": "loan-profile@1"}).json()["count"] == 0
-    # A use-case policy can be granted again afterwards (version 2).
-    r = _policy_request(client, bank, [_use_case_policy(["loan-profile@1", "name@2"])])
+    assert client.get("/policies", params={"use_case": LOAN}).json()["count"] == 0
+    # A use case can be granted again afterwards (next version).
+    r = _policy_request(client, bank, [_use_case_policy(LOAN)])
     _approve(client, r.json()["id"])
-    assert _versions(client, bank)[(None, 2)] == "active"
+    assert _versions(client, bank)[(LOAN, 3)] == "active"
+
+
+def test_revoke_entry_validation(client, bank):
+    for revoke, message in [
+        ([{"data_controller": FARMER, "use_case": LOAN}], "set one, not both"),
+        ([{}], "set one"),
+        ([{"use_case": LOAN}, {"use_case": LOAN}], "revoke: more than one entry"),
+    ]:
+        r = client.post(
+            "/partners/requests/policy", json={"partner_id": bank, "revoke": revoke}
+        )
+        assert r.status_code == 400 and message in r.text, r.text
 
 
 def test_policy_audit_trail(client, bank):
@@ -209,7 +272,7 @@ def test_policy_audit_trail(client, bank):
 def test_onboarding_reject_rejects_policies(client, keys):
     r = _onboard(client, keys, "PARTNER_POL_REJ", [_use_case_policy()])
     client.post(f"/partners/requests/{r.json()['id']}/reject", json={})
-    assert _versions(client, "PARTNER_POL_REJ") == {(None, 1): "rejected"}
+    assert _versions(client, "PARTNER_POL_REJ") == {(LOAN, 1): "rejected"}
 
 
 def test_policy_request_needs_approved_partner(client, keys):
@@ -228,11 +291,10 @@ def test_policy_request_unknown_partner(client):
     "policy, message",
     [
         ({"data_controller": FARMER}, "allowed_data_scopes: required"),
-        (_scope_policy(allowed_use_cases=["x@1"]), "allowed_use_cases: only"),
-        ({"data_controller": None}, "allowed_use_cases: required"),
-        ({"data_controller": "", "allowed_use_cases": ["x@1"], "allowed_data_scopes": ["a"]},
-         "allowed_data_scopes: only"),
-        (_use_case_policy(["loan-profile"]), "name@major"),
+        (_scope_policy(use_case=LOAN), "set one, not both"),
+        ({"data_controller": "", "use_case": None}, "set one"),
+        (_use_case_policy(allowed_data_scopes=["a"]), "allowed_data_scopes: only"),
+        (_use_case_policy("loan-profile"), "name@major"),
         (_scope_policy(allowed_signing_algs=["HS256"]), "allowed_signing_algs: unsupported"),
         (_scope_policy(allowed_signing_algs=[" "]), "at least one algorithm"),
         (_scope_policy(fetch_type="daily"), "fetch_type"),
@@ -248,6 +310,15 @@ def test_policy_validation(client, keys, policy, message):
     assert message in r.text
 
 
-def test_one_policy_per_controller_in_a_request(client, keys):
+def test_one_policy_per_key_in_a_request(client, keys):
     r = _onboard(client, keys, "PARTNER_POL_DUP", [_use_case_policy(), _use_case_policy()])
-    assert r.status_code == 400 and "more than one policy" in r.text
+    assert r.status_code == 400 and f"policies: more than one entry for use case {LOAN}" in r.text
+    # Several use cases (and registries) in one request: one policy each.
+    r = _onboard(
+        client, keys, "PARTNER_POL_MIX",
+        [_use_case_policy(), _use_case_policy(NAME), _scope_policy()],
+    )
+    assert r.status_code == 200, r.text
+    assert _versions(client, "PARTNER_POL_MIX") == {
+        (LOAN, 1): "pending", (NAME, 1): "pending", (FARMER, 1): "pending"
+    }
