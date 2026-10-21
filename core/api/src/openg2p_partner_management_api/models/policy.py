@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import JSON, DateTime, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,6 +65,9 @@ class PartnerPolicy(BaseModelWithId):
     fetch_type: Mapped[str] = mapped_column(String(20), default=FetchType.oneshot.value)
     max_fetch_frequency: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     data_life: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # True = the partner may present consents it collected and signed itself
+    # (the Consent Manager then accepts them; it cannot verify the subject agreed).
+    allow_partner_consents: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # The partner request that proposed this version.
     request_id: Mapped[str] = mapped_column(String(64), index=True)

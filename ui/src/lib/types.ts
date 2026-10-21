@@ -90,6 +90,8 @@ export interface PolicyInput {
   fetch_type: string;
   max_fetch_frequency: string | null;
   data_life: string | null;
+  // The partner may present consents it collected and signed itself.
+  allow_partner_consents: boolean;
 }
 
 export interface PartnerPolicy extends PolicyInput {

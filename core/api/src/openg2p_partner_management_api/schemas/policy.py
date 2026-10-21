@@ -130,6 +130,8 @@ class PolicyInput(BaseModel):
     - ``allowed_signing_algs``: at least one of ``GET /metadata`` → ``signing_algorithms``;
       one that matches none of the partner's keys is accepted with a warning.
     - durations: ISO-8601 (``P30D``, ``P1Y``, ``PT12H``), > 0, or null.
+    - ``allow_partner_consents``: true lets the partner present consents it
+      collected and signed itself (default false).
     Lists are trimmed, blanks and duplicates dropped.
     """
 
@@ -149,6 +151,8 @@ class PolicyInput(BaseModel):
     fetch_type: FetchType = FetchType.oneshot
     max_fetch_frequency: Optional[str] = None
     data_life: Optional[str] = Field(default=None, examples=["P30D"])
+    # True = the partner may present consents it collected and signed itself.
+    allow_partner_consents: bool = False
 
     _blank = field_validator("data_controller", "use_case", mode="before")(_blank_key)
 
@@ -250,6 +254,7 @@ class PolicyOut(BaseModel):
     fetch_type: str
     max_fetch_frequency: Optional[str] = None
     data_life: Optional[str] = None
+    allow_partner_consents: bool = False
     effective_from: Optional[datetime] = None
 
 

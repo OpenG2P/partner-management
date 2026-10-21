@@ -401,6 +401,7 @@ function policySummaryLine(p: PartnerPolicy) {
     `Algs: ${p.allowed_signing_algs.join(", ")}`,
     p.max_validity_duration ? `Validity ≤ ${p.max_validity_duration}` : null,
     labelOf(p.fetch_type),
+    p.allow_partner_consents ? "Own signed consents" : null,
   ]
     .filter(Boolean)
     .join(" · ");

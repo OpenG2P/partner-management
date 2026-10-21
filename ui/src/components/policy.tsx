@@ -21,6 +21,7 @@ export interface PolicyRow {
   fetch_type: string;
   max_fetch_frequency: string;
   data_life: string;
+  allow_partner_consents: boolean;
 }
 
 export const DEFAULT_SIGNING_ALGS = ["EdDSA", "ES256"];
@@ -38,6 +39,7 @@ export const emptyPolicy = (kind: PolicyRow["kind"] = "registry"): PolicyRow => 
   fetch_type: "oneshot",
   max_fetch_frequency: "",
   data_life: "",
+  allow_partner_consents: false,
 });
 
 const splitList = (v: string) =>
@@ -60,6 +62,7 @@ export function policyRowFrom(p: PolicyInput): PolicyRow {
     fetch_type: p.fetch_type,
     max_fetch_frequency: p.max_fetch_frequency || "",
     data_life: p.data_life || "",
+    allow_partner_consents: !!p.allow_partner_consents,
   };
 }
 
@@ -76,6 +79,7 @@ export function toPolicyInput(r: PolicyRow): PolicyInput {
     fetch_type: r.fetch_type,
     max_fetch_frequency: r.max_fetch_frequency.trim() || null,
     data_life: r.data_life.trim() || null,
+    allow_partner_consents: r.allow_partner_consents,
   };
 }
 
@@ -527,6 +531,20 @@ export function PolicyEditor({
         </div>
       </div>
 
+      <div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={row.allow_partner_consents}
+            onChange={(e) => onChange({ allow_partner_consents: e.target.checked })}
+          />
+          May present its own signed consents
+        </label>
+        <p className="text-xs mt-1 text-[color:var(--color-text-muted)]">
+          The Consent Manager cannot verify the farmer agreed; only the partner&apos;s signature.
+        </p>
+      </div>
+
       {problem && <p className="text-xs text-[color:var(--color-danger)]">{problem}</p>}
     </div>
   );
@@ -563,6 +581,10 @@ export function PolicySummary({ policy }: { policy: PolicyInput }) {
         {policy.max_fetch_frequency ? ` (at most every ${policy.max_fetch_frequency})` : ""}
         <span className={muted}> · Data life: </span>
         {policy.data_life || "—"}
+      </div>
+      <div>
+        <span className={muted}>Own signed consents: </span>
+        {policy.allow_partner_consents ? "accepted" : "not accepted"}
       </div>
     </div>
   );
