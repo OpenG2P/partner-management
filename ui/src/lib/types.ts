@@ -6,6 +6,7 @@ export interface PartnerRequest {
   org_name?: string | null;
   description?: string | null;
   jwks_url?: string | null;
+  keys_from_jwks_url?: boolean;
   proposed_keys: ProposedKey[];
   revoke_kids: string[];
   proposed_policies: PolicyInput[];
@@ -37,6 +38,8 @@ export interface Partner {
   org_name?: string | null;
   description?: string | null;
   jwks_url?: string | null;
+  // Keys read from jwks_url when needed (in addition to the keys listed here).
+  keys_from_jwks_url?: boolean;
   status: "created" | "active" | "disabled";
   created_by?: string | null;
   approved_by?: string | null;

@@ -88,7 +88,14 @@ export default function RequestDetailPage() {
           <Detail label="Partner ID" value={req.partner_id} />
           <Detail label="Name" value={req.name} />
           <Detail label="Organisation" value={req.org_name} />
-          <Detail label="JWKS URL" value={req.jwks_url} />
+          <Detail
+            label="JWKS URL"
+            value={
+              req.jwks_url && req.keys_from_jwks_url
+                ? `${req.jwks_url} (keys read from it when needed)`
+                : req.jwks_url
+            }
+          />
           <Detail label="Description" value={req.description} />
           <Detail label="Submitted by" value={req.submitted_by} />
           {req.reviewed_by && <Detail label="Reviewed by" value={req.reviewed_by} />}

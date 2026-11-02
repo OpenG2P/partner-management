@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..models import IDENTIFIER_PATTERN
 from .key import KeyInput, blank_to_none
@@ -32,10 +32,20 @@ class OnboardingRequestCreate(BaseModel):
     keys: List[KeyInput] = Field(default_factory=list)
     # When true and jwks_url is set, keys are fetched from it and stored.
     import_from_jwks_url: bool = False
+    # When true, the partner's keys are read from jwks_url whenever callers ask
+    # for them (cached), instead of being copied once; no key is needed now, so
+    # the partner can be onboarded before its JWKS URL answers.
+    keys_from_jwks_url: bool = False
     # Optional access policies, activated (version 1) when the partner is approved.
     policies: List[PolicyInput] = Field(default_factory=list)
 
     _jwks_url = field_validator("jwks_url", mode="before")(_check_jwks_url)
+
+    @model_validator(mode="after")
+    def _jwks_url_for_live_keys(self):
+        if self.keys_from_jwks_url and not self.jwks_url:
+            raise ValueError("keys_from_jwks_url needs a jwks_url.")
+        return self
 
     @field_validator("policies")
     @classmethod
@@ -111,6 +121,7 @@ class PartnerRequestResponse(BaseModel):
     org_name: Optional[str] = None
     description: Optional[str] = None
     jwks_url: Optional[str] = None
+    keys_from_jwks_url: bool = False
     proposed_keys: list = Field(default_factory=list)
     revoke_kids: list = Field(default_factory=list)
     proposed_policies: list = Field(default_factory=list)
@@ -131,6 +142,11 @@ class PartnerRequestResponse(BaseModel):
     @classmethod
     def _null_list(cls, value):
         return value or []
+
+    @field_validator("keys_from_jwks_url", mode="before")
+    @classmethod
+    def _null_false(cls, value):
+        return bool(value)
 
 
 class PartnerRequestListResponse(BaseModel):

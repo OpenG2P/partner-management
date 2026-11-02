@@ -42,6 +42,16 @@ class CatalogueSource(BaseModel):
         return self
 
 
+class BootstrapPartner(BaseModel):
+    """A partner onboarded at install (see ``bootstrap_partners``)."""
+
+    partner_id: str
+    jwks_url: str
+    name: Optional[str] = None
+    org_name: Optional[str] = None
+    description: Optional[str] = None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="partner_manager_", env_file=".env", extra="allow"
@@ -73,6 +83,19 @@ class Settings(BaseSettings):
     min_rsa_key_size: int = 2048
     # Timeout (seconds) when importing keys from a partner's jwks_url.
     jwks_fetch_timeout: int = 10
+    # Partners with keys_from_jwks_url: how long keys read from the URL are
+    # reused (s), and how long the last good answer is still served while the
+    # URL fails (s); after that only the partner's stored keys are served.
+    jwks_live_cache_ttl: int = 300
+    jwks_live_stale_ttl: int = 21600
+    jwks_live_fetch_timeout: float = 3.0
+
+    # --- Partners onboarded at startup ----------------------------------------
+    # Onboarded and approved by the staff API at startup (actor "bootstrap"),
+    # with keys read from jwks_url when needed and no policy (each data
+    # controller adds the partner's policies itself). A partner that already
+    # exists is left as it is. JSON list of BootstrapPartner.
+    bootstrap_partners: list[BootstrapPartner] = []
 
     # --- Public key-fetch API ------------------------------------------------
     # Cache-Control max-age (seconds) returned on key-fetch responses so callers

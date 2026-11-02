@@ -32,6 +32,8 @@ _ADDED_COLUMNS = [
     ("pm_partner_requests", "revoke_policies", "JSONB DEFAULT '[]'::jsonb"),
     ("pm_partner_policies", "use_case", "VARCHAR(255)"),
     ("pm_partner_policies", "allow_partner_consents", "BOOLEAN NOT NULL DEFAULT false"),
+    ("pm_partners", "keys_from_jwks_url", "BOOLEAN NOT NULL DEFAULT false"),
+    ("pm_partner_requests", "keys_from_jwks_url", "BOOLEAN NOT NULL DEFAULT false"),
 ]
 # Replaced by one policy per use case (use_case) and revoke_policies.
 _DROPPED_COLUMNS = [

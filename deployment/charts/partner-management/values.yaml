@@ -238,6 +238,18 @@ staffPortalApi:
   #     url: http://agri-composite-api/composite/v1/use-cases
   #     label: Agri Stack Composite
   catalogueSources: []
+  # Partners onboarded and approved at install (by the actor "bootstrap", an
+  # exception to raising and approving by different people), with their keys
+  # read from jwksUrl when needed and no policy: each data controller adds the
+  # partner's policies itself. So a partner can be onboarded before its JWKS
+  # URL answers, and rotates its keys itself. Existing partners are left as they
+  # are. Values are templated. May also be a YAML/JSON string. Example:
+  # bootstrapPartners:
+  #   - partnerId: PARTNER_AGRI_COMPOSITE
+  #     jwksUrl: https://agri-composite.agrix.example.org/.well-known/jwks.json
+  #     name: Data Sharing Gateway
+  bootstrapPartners: []
+
   # Per-source fetch timeout (s) and how long a fetched catalogue is reused (s).
   catalogueFetchTimeout: 3
   catalogueCacheTtl: 300
@@ -280,6 +292,8 @@ staffPortalApi:
     # Catalogue sources (see catalogueSources above), as JSON.
     PARTNER_MANAGER_CATALOGUE_SOURCES: '{{ include "pm.catalogueSourcesJson" . }}'
     PARTNER_MANAGER_CATALOGUE_FETCH_TIMEOUT: '{{ .Values.catalogueFetchTimeout }}'
+    # Partners onboarded at install (see bootstrapPartners above), as JSON.
+    PARTNER_MANAGER_BOOTSTRAP_PARTNERS: '{{ include "pm.bootstrapPartnersJson" . }}'
     PARTNER_MANAGER_CATALOGUE_CACHE_TTL: '{{ .Values.catalogueCacheTtl }}'
     # Master Data code lists (see masterData above).
     PARTNER_MANAGER_MDS_URL: '{{ tpl .Values.masterData.url $ }}'

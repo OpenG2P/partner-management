@@ -41,6 +41,8 @@ function OnboardForm() {
   const [description, setDescription] = useState("");
   const [jwksUrl, setJwksUrl] = useState("");
   const [importJwks, setImportJwks] = useState(false);
+  // Onboarding only: read the partner's keys from its JWKS URL when needed.
+  const [liveJwks, setLiveJwks] = useState(false);
   const [revokeKids, setRevokeKids] = useState<string[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loadedKeys, setLoadedKeys] = useState<{ partnerId: string; keys: PartnerKey[] }>({
@@ -131,6 +133,7 @@ function OnboardForm() {
           description,
           jwks_url: jwksUrl || null,
           import_from_jwks_url: importJwks,
+          keys_from_jwks_url: liveJwks,
           keys: cleanKeys,
           policies: policies.map(toPolicyInput),
         });
@@ -306,7 +309,10 @@ function OnboardForm() {
             value={jwksUrl}
             onChange={(e) => {
               setJwksUrl(e.target.value);
-              if (!e.target.value.trim()) setImportJwks(false);
+              if (!e.target.value.trim()) {
+                setImportJwks(false);
+                setLiveJwks(false);
+              }
             }}
             placeholder="https://partner.example.org/.well-known/jwks.json"
           />
@@ -319,6 +325,18 @@ function OnboardForm() {
             />
             Import keys from this JWKS URL now (fetched once and stored)
           </label>
+          {!isUpdate && (
+            <label className="flex items-center gap-2 mt-2 text-sm">
+              <input
+                type="checkbox"
+                checked={liveJwks}
+                disabled={!jwksUrl.trim()}
+                onChange={(e) => setLiveJwks(e.target.checked)}
+              />
+              Read keys from this JWKS URL whenever they are needed (the partner rotates its own
+              keys; no key needed now)
+            </label>
+          )}
         </div>
 
         {isUpdate && (

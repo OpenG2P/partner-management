@@ -15,6 +15,7 @@ from .controllers import (
     KeyFetchController,
     PolicyFetchController,
 )
+from .bootstrap import bootstrap_partners
 from .migrations import migrate_all
 from .services import (
     AuditService,
@@ -61,4 +62,10 @@ class Initializer(BaseInitializer):
 
     def migrate_database(self, args):
         super().migrate_database(args)
-        asyncio.run(migrate_all())
+        asyncio.run(_migrate_and_bootstrap())
+
+
+async def _migrate_and_bootstrap():
+    await migrate_all()
+    # Partners onboarded at install (bootstrap_partners); needs the tables above.
+    await bootstrap_partners()

@@ -121,8 +121,11 @@ class RequestService(BaseService):
         proposed = await self._collect_and_normalize(
             data.keys, data.jwks_url, data.import_from_jwks_url
         )
-        if not proposed:
-            raise InvalidKeyError("At least one public key is required to onboard a partner.")
+        if not proposed and not data.keys_from_jwks_url:
+            raise InvalidKeyError(
+                "At least one public key is required to onboard a partner "
+                "(or read its keys from its JWKS URL: keys_from_jwks_url)."
+            )
         warnings = await self._check_catalogue(data.policies)
         warnings += self._signing_alg_warnings(
             data.policies, {k["algorithm"] for k in proposed}, "the proposed keys' algorithms"
@@ -136,6 +139,7 @@ class RequestService(BaseService):
                 org_name=data.org_name,
                 description=data.description,
                 jwks_url=data.jwks_url,
+                keys_from_jwks_url=data.keys_from_jwks_url,
                 status=PartnerStatus.created.value,
                 created_by=actor_name,
             )
@@ -146,6 +150,7 @@ class RequestService(BaseService):
                 org_name=data.org_name,
                 description=data.description,
                 jwks_url=data.jwks_url,
+                keys_from_jwks_url=data.keys_from_jwks_url,
                 proposed_keys=proposed,
                 revoke_kids=[],
                 proposed_policies=[p.model_dump() for p in data.policies],
@@ -181,6 +186,7 @@ class RequestService(BaseService):
                 details={
                     "type": RequestType.onboarding.value,
                     "keys": len(proposed),
+                    **({"keys_from_jwks_url": data.jwks_url} if data.keys_from_jwks_url else {}),
                     "policies": [p.key[1] for p in data.policies],
                     **({"warnings": warnings} if warnings else {}),
                 },

@@ -144,7 +144,16 @@ export default function PartnerDetailPage() {
       <div className="card mb-4">
         <div className="grid grid-cols-2 gap-x-8 gap-y-2">
           <Detail label="Organisation" value={partner.org_name} />
-          <Detail label="JWKS URL" value={partner.jwks_url} />
+          <Detail
+            label="JWKS URL"
+            value={
+              partner.jwks_url
+                ? partner.keys_from_jwks_url
+                  ? `${partner.jwks_url} (keys read from it when needed)`
+                  : partner.jwks_url
+                : null
+            }
+          />
           <Detail label="Created by" value={partner.created_by} />
           <Detail label="Approved by" value={partner.approved_by} />
           <Detail label="Created" value={fmtDate(partner.created_at)} />

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import JSON, String, Text
+from sqlalchemy import JSON, Boolean, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,6 +42,8 @@ class PartnerRequest(BaseModelWithId):
     org_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     jwks_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # Onboarding only: the partner's keys are read from jwks_url when needed.
+    keys_from_jwks_url: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Normalised keys to activate on approval: list of
     # {kid, algorithm, public_key(PEM), key_fingerprint, not_before, not_after}.

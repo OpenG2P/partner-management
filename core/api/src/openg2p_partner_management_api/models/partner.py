@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import DateTime, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import BaseModelWithId
@@ -57,6 +57,10 @@ class Partner(BaseModelWithId):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Optional well-known JWKS endpoint the admin may import keys from.
     jwks_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # True: the partner's keys are read from jwks_url when callers ask for them
+    # (cached), on top of any stored keys, so the partner can rotate its keys
+    # itself and can be onboarded before its JWKS URL answers.
+    keys_from_jwks_url: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(
         String(20), default=PartnerStatus.created.value, index=True
     )
