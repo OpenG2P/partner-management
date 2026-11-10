@@ -285,6 +285,92 @@ export function PolicyEditor({
   const isOtherUseCase = otherUseCase || (uc !== "" && !ucItem);
   const ucSelect = ucItems.length > 0 && !lockKey;
 
+  // Purposes and subject ID types; then validity, fetch and partner-signed consents.
+  // For a use case they only narrow what the use case already defines, so they are
+  // folded into "Optional limits" (open when any is set).
+  const purposeFields = (
+    <div className="grid grid-cols-2 gap-4">
+      <CodeListField
+        label="Purposes"
+        value={row.purposes}
+        source={catalogue.find((s) => s.kind === "purposes")}
+        onChange={(v) => onChange({ purposes: v })}
+      />
+      <CodeListField
+        label="Subject ID types"
+        value={row.subject_id_types}
+        source={catalogue.find((s) => s.kind === "subject_id_types")}
+        onChange={(v) => onChange({ subject_id_types: v })}
+      />
+    </div>
+  );
+  const limitFields = (
+    <>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="field-label">Max consent validity</label>
+            <input
+              className="field-input"
+              value={row.max_validity_duration}
+              onChange={(e) => onChange({ max_validity_duration: e.target.value })}
+              placeholder="ISO-8601, e.g. P1Y (empty = no limit)"
+            />
+          </div>
+          <div>
+            <label className="field-label">Data life</label>
+            <input
+              className="field-input"
+              value={row.data_life}
+              onChange={(e) => onChange({ data_life: e.target.value })}
+              placeholder="ISO-8601, e.g. P30D"
+            />
+          </div>
+          <div>
+            <label className="field-label">Fetch type</label>
+            <select
+              className="field-input"
+              value={row.fetch_type}
+              onChange={(e) => onChange({ fetch_type: e.target.value })}
+            >
+              {meta.fetch_types.map((f) => (
+                <option key={f} value={f}>
+                  {labelOf(f)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Max fetch frequency</label>
+            <input
+              className="field-input"
+              value={row.max_fetch_frequency}
+              onChange={(e) => onChange({ max_fetch_frequency: e.target.value })}
+              placeholder="ISO-8601, e.g. P1D"
+            />
+          </div>
+        </div>
+  
+        <div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={row.allow_partner_consents}
+              onChange={(e) => onChange({ allow_partner_consents: e.target.checked })}
+            />
+            May present its own signed consents
+          </label>
+          <p className="text-xs mt-1 text-[color:var(--color-text-muted)]">
+            The Consent Manager cannot verify the farmer agreed; only the partner&apos;s signature.
+          </p>
+        </div>
+    </>
+  );
+  const hasLimits = Boolean(
+    row.purposes.trim() || row.subject_id_types.trim() || row.max_validity_duration.trim() ||
+      row.data_life.trim() || row.max_fetch_frequency.trim() || row.allow_partner_consents ||
+      row.fetch_type !== "oneshot",
+  );
+
   return (
     <div className="border border-[color:var(--color-border)] rounded-md p-3 mb-3 space-y-3">
       <div className="flex gap-3">
@@ -439,20 +525,7 @@ export function PolicyEditor({
         )
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <CodeListField
-          label="Purposes"
-          value={row.purposes}
-          source={catalogue.find((s) => s.kind === "purposes")}
-          onChange={(v) => onChange({ purposes: v })}
-        />
-        <CodeListField
-          label="Subject ID types"
-          value={row.subject_id_types}
-          source={catalogue.find((s) => s.kind === "subject_id_types")}
-          onChange={(v) => onChange({ subject_id_types: v })}
-        />
-      </div>
+      {isRegistry && purposeFields}
 
       <div>
         <label className="field-label">Signing algorithms *</label>
@@ -487,63 +560,21 @@ export function PolicyEditor({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="field-label">Max consent validity</label>
-          <input
-            className="field-input"
-            value={row.max_validity_duration}
-            onChange={(e) => onChange({ max_validity_duration: e.target.value })}
-            placeholder="ISO-8601, e.g. P1Y (empty = no limit)"
-          />
-        </div>
-        <div>
-          <label className="field-label">Data life</label>
-          <input
-            className="field-input"
-            value={row.data_life}
-            onChange={(e) => onChange({ data_life: e.target.value })}
-            placeholder="ISO-8601, e.g. P30D"
-          />
-        </div>
-        <div>
-          <label className="field-label">Fetch type</label>
-          <select
-            className="field-input"
-            value={row.fetch_type}
-            onChange={(e) => onChange({ fetch_type: e.target.value })}
-          >
-            {meta.fetch_types.map((f) => (
-              <option key={f} value={f}>
-                {labelOf(f)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="field-label">Max fetch frequency</label>
-          <input
-            className="field-input"
-            value={row.max_fetch_frequency}
-            onChange={(e) => onChange({ max_fetch_frequency: e.target.value })}
-            placeholder="ISO-8601, e.g. P1D"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={row.allow_partner_consents}
-            onChange={(e) => onChange({ allow_partner_consents: e.target.checked })}
-          />
-          May present its own signed consents
-        </label>
-        <p className="text-xs mt-1 text-[color:var(--color-text-muted)]">
-          The Consent Manager cannot verify the farmer agreed; only the partner&apos;s signature.
-        </p>
-      </div>
+      {isRegistry ? (
+        limitFields
+      ) : (
+        <details open={hasLimits} className="rounded-md border border-[color:var(--color-border)] p-3">
+          <summary className="cursor-pointer text-sm font-medium">Optional limits</summary>
+          <p className={`${muted} mt-2 mb-3`}>
+            Leave empty: the use case&apos;s own purpose and subject ID types apply, with no further
+            limit. Set them only to narrow what this partner may do with the use case.
+          </p>
+          <div className="space-y-3">
+            {purposeFields}
+            {limitFields}
+          </div>
+        </details>
+      )}
 
       {problem && <p className="text-xs text-[color:var(--color-danger)]">{problem}</p>}
     </div>
