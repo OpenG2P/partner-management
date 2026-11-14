@@ -42,6 +42,12 @@ _DROPPED_COLUMNS = [
 ]
 
 
+CLEAR_USE_CASE_PURPOSES = (
+    "UPDATE pm_partner_policies SET allowed_purposes = '[]' "
+    "WHERE use_case IS NOT NULL AND allowed_purposes IS DISTINCT FROM '[]'::jsonb"
+)
+
+
 async def _alter_existing_tables():
     engine = dbengine.get()
     if engine.dialect.name != "postgresql":
@@ -66,3 +72,6 @@ async def _alter_existing_tables():
                 "AND status IN ('active', 'pending')"
             )
         )
+        # A use-case policy lists no purposes (granting a use case grants its
+        # purpose): clear those set before that rule, in every version.
+        await conn.execute(text(CLEAR_USE_CASE_PURPOSES))

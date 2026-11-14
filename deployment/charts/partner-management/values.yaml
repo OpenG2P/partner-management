@@ -254,8 +254,9 @@ staffPortalApi:
   catalogueFetchTimeout: 3
   catalogueCacheTtl: 300
 
-  # Master Data code lists offered as policy purposes and subject ID types
-  # (POST {url}/catalogue/get_list_values, with a client-credentials token of
+  # Master Data code lists offered as policy purposes (registry policies only:
+  # a use-case policy takes none) and subject ID types (POST
+  # {url}/catalogue/get_list_values, with a client-credentials token of
   # global.authClientId — a service account, not the user's token). With a list
   # loaded, requests naming other values are rejected; MDS down = accepted with
   # a warning; a list not in the country's pack = free text. url "" or an empty

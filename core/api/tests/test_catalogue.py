@@ -333,6 +333,11 @@ def mds(client, monkeypatch):
     service.clear_cache()
 
 
+def _crop(controller="crop_registry"):
+    """A scope policy for a registry with no catalogue source (scopes unchecked)."""
+    return _scope("crop.any", controller=controller)
+
+
 def _with(policy, **extra):
     return {**policy, **extra}
 
@@ -378,7 +383,7 @@ def test_mds_list_not_in_pack(client, keys, mds):
 def test_mds_known_values_accepted(client, keys, mds):
     r = _onboard(
         client, keys, "PARTNER_MDS_OK",
-        [_with(_use_case("x@1"), allowed_purposes=["SUBSIDY"], allowed_subject_id_types=["FAYDA_FIN"])],
+        [_with(_crop(), allowed_purposes=["SUBSIDY"], allowed_subject_id_types=["FAYDA_FIN"])],
     )
     assert r.status_code == 200, r.text
     assert r.json()["warnings"] == []
@@ -388,8 +393,8 @@ def test_mds_unknown_values_rejected(client, keys, mds):
     r = _onboard(
         client, keys, "PARTNER_MDS_BAD",
         [
-            _with(_use_case("x@1"), allowed_purposes=["SUBSIDY", "OLD_PURPOSE", "MARKETING"]),
-            _with(_scope("crop.any", controller="crop_registry"), allowed_subject_id_types=["PASSPORT"]),
+            _with(_crop(), allowed_purposes=["SUBSIDY", "OLD_PURPOSE", "MARKETING"]),
+            _with(_crop("land_registry"), allowed_subject_id_types=["PASSPORT"]),
         ],
     )
     assert r.status_code == 400
@@ -407,7 +412,7 @@ def test_mds_down_accepts_with_warning(client, keys, mds):
     assert all(s["items"] == [] and "cannot reach Master Data" in s["error"] for s in sources)
     r = _onboard(
         client, keys, "PARTNER_MDS_DOWN",
-        [_with(_use_case("x@1"), allowed_purposes=["ANYTHING"])],
+        [_with(_crop(), allowed_purposes=["ANYTHING"])],
     )
     assert r.status_code == 200, r.text
     (warning,) = r.json()["warnings"]

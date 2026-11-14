@@ -94,6 +94,7 @@ def test_onboarding_activates_policies(client, bank):
     # Trimmed, blanks and duplicates dropped; durations upper-cased; defaults applied.
     assert farmer["allowed_data_scopes"] == ["farmer.basic", "farmer.land"]
     assert farmer["max_validity_duration"] == "P1Y"
+    assert farmer["allowed_purposes"] == ["loan"]  # scope policies keep their purposes
     assert farmer["allowed_signing_algs"] == ["EdDSA", "ES256"]
     assert farmer["fetch_type"] == "oneshot"
     assert farmer["allow_partner_consents"] is False
@@ -205,18 +206,20 @@ def test_policy_request_reject(client, bank):
 
 def test_use_case_policies_independent(client, bank):
     """Each use case is its own policy: versioned, pending and revoked separately."""
-    r = _policy_request(client, bank, [_use_case_policy(NAME, allowed_purposes=["kyc"])])
+    r = _policy_request(client, bank, [_use_case_policy(NAME, allowed_subject_id_types=["FIN"])])
     assert r.status_code == 200, r.text
     _approve(client, r.json()["id"])
     versions = _versions(client, bank)
     assert versions[(NAME, 1)] == "active" and versions[(LOAN, 1)] == "active"
     r = client.get(f"/policies/{bank}", params={"use_case": NAME})
-    assert r.json()["policies"][0]["allowed_purposes"] == ["kyc"]
+    assert r.json()["policies"][0]["allowed_subject_id_types"] == ["FIN"]
+    # A use-case policy lists no purposes: granting the use case grants its purpose.
+    assert r.json()["policies"][0]["allowed_purposes"] == []
 
     loan_v1_id = client.get(f"/policies/{bank}", params={"use_case": LOAN}).json()["policies"][0]["id"]
     # A pending change to one use case blocks only that use case.
     loan = _policy_request(
-        client, bank, [_use_case_policy(LOAN, allowed_purposes=["loan"], allow_partner_consents=True)]
+        client, bank, [_use_case_policy(LOAN, data_life="P7D", allow_partner_consents=True)]
     )
     assert loan.status_code == 200, loan.text
     clash = _policy_request(client, bank, [_use_case_policy(LOAN)])
@@ -232,11 +235,24 @@ def test_use_case_policies_independent(client, bank):
     assert versions[(LOAN, 1)] == "superseded" and versions[(LOAN, 2)] == "active"
     assert versions[(NAME, 1)] == "revoked"
     r = client.get(f"/policies/{bank}", params={"use_case": LOAN})
-    assert r.json()["policies"][0]["allowed_purposes"] == ["loan"]
+    assert r.json()["policies"][0]["data_life"] == "P7D"
     assert r.json()["policies"][0]["allow_partner_consents"] is True
     assert r.json()["policies"][0]["id"] != loan_v1_id  # each version has its own id
     assert client.get(f"/policies/{bank}", params={"use_case": NAME}).status_code == 404
     assert client.get("/policies", params={"use_case": NAME}).json()["count"] == 0
+
+
+def test_use_case_policy_takes_no_purposes(client, bank):
+    """Refused on policy (update) requests as on onboarding; empty or blank is fine."""
+    other = "other-check@1"
+    r = _policy_request(client, bank, [_use_case_policy(other, allowed_purposes=["kyc"])])
+    assert r.status_code == 400 and _code(r) == "G2P-REQ-102", r.text
+    assert "allowed_purposes: not for a use-case policy ('other-check@1')" in r.text
+    assert "granting a use case grants its purpose" in r.text
+    blank = _policy_request(client, bank, [_use_case_policy(other, allowed_purposes=[" ", ""])])
+    assert blank.status_code == 200, blank.text
+    assert blank.json()["proposed_policies"][0]["allowed_purposes"] == []
+    client.post(f"/partners/requests/{blank.json()['id']}/reject", json={})
 
 
 def test_policy_revoke(client, bank):
@@ -305,6 +321,7 @@ def test_policy_request_unknown_partner(client):
         (_scope_policy(use_case=LOAN), "set one, not both"),
         ({"data_controller": "", "use_case": None}, "set one"),
         (_use_case_policy(allowed_data_scopes=["a"]), "allowed_data_scopes: only"),
+        (_use_case_policy(allowed_purposes=["loan"]), "allowed_purposes: not for a use-case"),
         (_use_case_policy("loan-profile"), "name@major"),
         (_scope_policy(allowed_signing_algs=["HS256"]), "allowed_signing_algs: unsupported"),
         (_scope_policy(allowed_signing_algs=[" "]), "at least one algorithm"),

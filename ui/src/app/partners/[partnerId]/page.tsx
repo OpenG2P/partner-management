@@ -400,12 +400,12 @@ export default function PartnerDetailPage() {
   );
 }
 
-// One line: scopes (registry), purposes, algorithms, validity, fetch.
+// One line: scopes and purposes (registry), algorithms, validity, fetch.
 function policySummaryLine(p: PartnerPolicy) {
   const any = (v: string[]) => (v.length ? v.join(", ") : "any");
   return [
     p.data_controller ? `Scopes: ${p.allowed_data_scopes.join(", ")}` : null,
-    `Purposes: ${any(p.allowed_purposes)}`,
+    p.data_controller ? `Purposes: ${any(p.allowed_purposes)}` : null,
     p.allowed_subject_id_types.length ? `ID types: ${p.allowed_subject_id_types.join(", ")}` : null,
     `Algs: ${p.allowed_signing_algs.join(", ")}`,
     p.max_validity_duration ? `Validity ≤ ${p.max_validity_duration}` : null,

@@ -115,7 +115,7 @@ questions:
   label: Master Data URL
   group: Catalogue Sources
 - variable: staffPortalApi.masterData.purposeListCode
-  description: Master Data list of consent purposes offered in policies. Empty = free text. A list the country's pack does not have also means free text.
+  description: Master Data list of consent purposes offered in registry (scope) policies; use-case policies take none. Empty = free text. A list the country's pack does not have also means free text.
   type: string
   default: CONSENT_PURPOSE
   label: Purposes List Code

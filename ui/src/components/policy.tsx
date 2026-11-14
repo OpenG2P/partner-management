@@ -72,7 +72,8 @@ export function toPolicyInput(r: PolicyRow): PolicyInput {
     data_controller: isRegistry ? r.data_controller.trim() : null,
     use_case: isRegistry ? null : r.use_case.trim(),
     allowed_data_scopes: isRegistry ? splitList(r.scopes) : [],
-    allowed_purposes: splitList(r.purposes),
+    // A use-case policy lists no purposes: granting the use case grants its purpose.
+    allowed_purposes: isRegistry ? splitList(r.purposes) : [],
     allowed_subject_id_types: splitList(r.subject_id_types),
     allowed_signing_algs: r.signing_algs,
     max_validity_duration: r.max_validity_duration.trim() || null,
@@ -285,9 +286,18 @@ export function PolicyEditor({
   const isOtherUseCase = otherUseCase || (uc !== "" && !ucItem);
   const ucSelect = ucItems.length > 0 && !lockKey;
 
-  // Purposes and subject ID types; then validity, fetch and partner-signed consents.
-  // For a use case they only narrow what the use case already defines, so they are
+  // Purposes (registry policies only: granting a use case grants its purpose) and
+  // subject ID types; then validity, fetch and partner-signed consents. For a use
+  // case the limits only narrow what the use case already defines, so they are
   // folded into "Optional limits" (open when any is set).
+  const subjectIdTypesField = (
+    <CodeListField
+      label="Subject ID types"
+      value={row.subject_id_types}
+      source={catalogue.find((s) => s.kind === "subject_id_types")}
+      onChange={(v) => onChange({ subject_id_types: v })}
+    />
+  );
   const purposeFields = (
     <div className="grid grid-cols-2 gap-4">
       <CodeListField
@@ -296,12 +306,7 @@ export function PolicyEditor({
         source={catalogue.find((s) => s.kind === "purposes")}
         onChange={(v) => onChange({ purposes: v })}
       />
-      <CodeListField
-        label="Subject ID types"
-        value={row.subject_id_types}
-        source={catalogue.find((s) => s.kind === "subject_id_types")}
-        onChange={(v) => onChange({ subject_id_types: v })}
-      />
+      {subjectIdTypesField}
     </div>
   );
   const limitFields = (
@@ -366,7 +371,7 @@ export function PolicyEditor({
     </>
   );
   const hasLimits = Boolean(
-    row.purposes.trim() || row.subject_id_types.trim() || row.max_validity_duration.trim() ||
+    row.subject_id_types.trim() || row.max_validity_duration.trim() ||
       row.data_life.trim() || row.max_fetch_frequency.trim() || row.allow_partner_consents ||
       row.fetch_type !== "oneshot",
   );
@@ -500,7 +505,9 @@ export function PolicyEditor({
             {ucItem && (
               <div className={muted}>
                 {ucItem.description && <span className="block">{ucItem.description}</span>}
-                {ucItem.purpose && <span className="block">Purpose: {ucItem.purpose}</span>}
+                {ucItem.purpose && (
+                  <span className="block">Granting it grants its purpose: {ucItem.purpose}</span>
+                )}
               </div>
             )}
             {ucFailed.map((s) => (
@@ -511,15 +518,6 @@ export function PolicyEditor({
             ))}
             {isOtherUseCase && uc && ucSources.length > 0 && ucFailed.length === 0 && (
               <p className={danger}>Not in the catalogue: the request will be refused.</p>
-            )}
-            {ucItem?.purpose && (
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => onChange({ purposes: ucItem.purpose! })}
-              >
-                Set purposes from selected use case
-              </button>
             )}
           </div>
         )
@@ -566,11 +564,11 @@ export function PolicyEditor({
         <details open={hasLimits} className="rounded-md border border-[color:var(--color-border)] p-3">
           <summary className="cursor-pointer text-sm font-medium">Optional limits</summary>
           <p className={`${muted} mt-2 mb-3`}>
-            Leave empty: the use case&apos;s own purpose and subject ID types apply, with no further
-            limit. Set them only to narrow what this partner may do with the use case.
+            Granting the use case grants its purpose. Leave these empty for no further limit; set
+            them only to narrow what this partner may do with the use case.
           </p>
           <div className="space-y-3">
-            {purposeFields}
+            <div className="grid grid-cols-2 gap-4">{subjectIdTypesField}</div>
             {limitFields}
           </div>
         </details>
@@ -595,9 +593,14 @@ export function PolicySummary({ policy }: { policy: PolicyInput }) {
         </div>
       )}
       <div>
-        <span className={muted}>Purposes: </span>
-        {list(policy.allowed_purposes)}
-        <span className={muted}> · Subject ID types: </span>
+        {policy.data_controller && (
+          <>
+            <span className={muted}>Purposes: </span>
+            {list(policy.allowed_purposes)}
+            <span className={muted}> · </span>
+          </>
+        )}
+        <span className={muted}>Subject ID types: </span>
         {list(policy.allowed_subject_id_types)}
       </div>
       <div>

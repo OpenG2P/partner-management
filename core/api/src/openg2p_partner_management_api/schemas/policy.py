@@ -123,10 +123,12 @@ class PolicyInput(BaseModel):
     - ``data_controller`` (e.g. ``farmer_registry``): a scope policy for that
       registry — ``allowed_data_scopes`` required;
     - ``use_case`` (``name@major``, e.g. ``loan-profile@1``): a use-case policy
-      for that exchange use case — ``allowed_data_scopes`` empty.
+      for that exchange use case — ``allowed_data_scopes`` and
+      ``allowed_purposes`` empty: granting a use case grants its purpose.
     Other fields:
-    - purposes / subject id types: empty = any; codes of the country's Master
-      Data lists (CONSENT_PURPOSE, SUBJECT_ID_TYPE) when configured, else free.
+    - purposes (scope policies only) / subject id types: empty = any; codes of
+      the country's Master Data lists (CONSENT_PURPOSE, SUBJECT_ID_TYPE) when
+      configured, else free.
     - ``allowed_signing_algs``: at least one of ``GET /metadata`` → ``signing_algorithms``;
       one that matches none of the partner's keys is accepted with a warning.
     - durations: ISO-8601 (``P30D``, ``P1Y``, ``PT12H``), > 0, or null.
@@ -211,6 +213,12 @@ class PolicyInput(BaseModel):
             raise ValueError(
                 "allowed_data_scopes: only for a registry's policy (set data_controller)"
             )
+        if self.use_case and self.allowed_purposes:
+            raise ValueError(
+                f"allowed_purposes: not for a use-case policy ('{self.use_case}'); granting "
+                "a use case grants its purpose. Purposes belong in a registry's policy "
+                "(set data_controller)"
+            )
         return self
 
     @property
@@ -247,6 +255,8 @@ class PolicyOut(BaseModel):
     use_case: Optional[str] = None
     version: int
     allowed_data_scopes: List[str] = Field(default_factory=list)
+    # Scope policies only; always empty for a use-case policy (its use case's
+    # purpose is granted with it).
     allowed_purposes: List[str] = Field(default_factory=list)
     allowed_subject_id_types: List[str] = Field(default_factory=list)
     allowed_signing_algs: List[str] = Field(default_factory=list)

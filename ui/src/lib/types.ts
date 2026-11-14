@@ -86,6 +86,7 @@ export interface PolicyInput {
   data_controller: string | null;
   use_case: string | null;
   allowed_data_scopes: string[];
+  // Registry (scope) policies only; always empty for a use-case policy.
   allowed_purposes: string[];
   allowed_subject_id_types: string[];
   allowed_signing_algs: string[];
