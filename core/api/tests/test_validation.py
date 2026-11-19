@@ -6,8 +6,9 @@ handler as 400 with code G2P-REQ-102; service-level key checks as PM-KEY-400.
 
 import asyncio
 
+from openg2p_fastapi_common.context import get_async_session_maker
+
 from openg2p_partner_management_api.models import PartnerKey, SigningAlgorithm
-from openg2p_partner_management_api.services.request_service import _sm
 
 
 def _onboard(client, keys, partner_id, **key_extra):
@@ -113,7 +114,8 @@ def test_legacy_rows_with_unknown_values_still_load(client):
     """Rows written before validation (e.g. an odd algorithm/status) must still render."""
 
     async def _insert():
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             session.add(
                 PartnerKey(
                     partner_id="PARTNER_LEGACY",
