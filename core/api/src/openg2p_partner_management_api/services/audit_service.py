@@ -1,11 +1,11 @@
 import logging
 
+from openg2p_fastapi_common.context import get_async_session_maker
 from openg2p_fastapi_common.service import BaseService
 from sqlalchemy import select
 
 from ..config import Settings
 from ..models import AuditAction, AuditEvent
-from .partner_service import session_maker
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -45,7 +45,8 @@ class AuditService(BaseService):
         )
 
     async def list_for_partner(self, partner_id: str) -> list[AuditEvent]:
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             res = await session.execute(
                 select(AuditEvent)
                 .where(AuditEvent.partner_id == partner_id)
