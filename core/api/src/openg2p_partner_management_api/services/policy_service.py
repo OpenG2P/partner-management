@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from openg2p_fastapi_common.context import get_async_session_maker
 from openg2p_fastapi_common.service import BaseService
 from sqlalchemy import func, select
 
@@ -18,7 +19,6 @@ from ..models import (
 )
 from ..schemas.policy import policy_label
 from .audit_service import AuditService
-from .partner_service import session_maker
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -234,7 +234,8 @@ class PolicyService(BaseService):
 
     async def list_for_partner(self, partner_id: str, all_versions: bool = False) -> list[PartnerPolicy]:
         """Staff view: active policies, or every version (newest first per key)."""
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             stmt = select(PartnerPolicy).where(PartnerPolicy.partner_id == partner_id)
             if not all_versions:
                 stmt = stmt.where(PartnerPolicy.status == PolicyStatus.active.value)
@@ -254,7 +255,8 @@ class PolicyService(BaseService):
         policies); ``use_case`` = that use case's policy. An unknown / non-active
         partner and one with no matching active policy all return None.
         """
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             res = await session.execute(
                 select(Partner).where(Partner.partner_id == partner_id)
             )
@@ -276,7 +278,8 @@ class PolicyService(BaseService):
         self, use_case: Optional[str] = None, data_controller: Optional[str] = None
     ) -> list[PartnerPolicy]:
         """Active policies of active partners, optionally filtered (for listings)."""
-        async with session_maker()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             stmt = _filtered(
                 select(PartnerPolicy)
                 .join(Partner, Partner.partner_id == PartnerPolicy.partner_id)
