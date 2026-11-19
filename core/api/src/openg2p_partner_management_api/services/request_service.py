@@ -271,7 +271,8 @@ class RequestService(BaseService):
         warnings += self._signing_alg_warnings(
             data.policies, active_algs, "the partner's active keys' algorithms"
         )
-        async with _sm()() as session:
+        session_maker = get_async_session_maker()
+        async with session_maker() as session:
             await self.policies.check_proposal(
                 session, data.partner_id, data.policies, data.revoke
             )
@@ -320,7 +321,9 @@ class RequestService(BaseService):
                 raise RequestNotFoundError(request_id)
             return req
 
-    async def list_requests(self, status: str = None, partner_id: str = None) -> list[PartnerRequest]:
+    async def list_requests(
+        self, status: str = None, partner_id: str = None, request_type: str = None
+    ) -> list[PartnerRequest]:
         session_maker = get_async_session_maker()
         async with session_maker() as session:
             stmt = select(PartnerRequest).order_by(PartnerRequest.created_at.desc())
